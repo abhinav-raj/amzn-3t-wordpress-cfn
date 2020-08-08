@@ -186,12 +186,18 @@ Resources:
     Type: AWS::EC2::EIP
     Properties:
       Domain: vpc
+      Tags: 
+        - Key: Name
+          Value: NATElasticIP2
   NatGateway2:
     Type: AWS::EC2::NatGateway
     DependsOn: VPCGW
     Properties:
       AllocationId: !GetAtt NatEIP2.AllocationId
       SubnetId: !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: NatGateway2
   NatRoute2:
     Type: AWS::EC2::Route
     Properties:
@@ -263,6 +269,14 @@ Outputs:
   # WebServerElasticIP:
   #   Description: 'Elastic IP assigned to bastian instance'
   #   Value: !Ref BastianEIP
+  PublicSubnet1:
+    Value: !Ref PublicSubnet1
+  PublicSubnet2:
+    Value: !Ref PublicSubnet2
+  WebSubnet1:
+    Value: !Ref WebSubnet1
+  WebSubnet2:
+    Value: !Ref WebSubnet2
   
   
 
