@@ -61,7 +61,7 @@ Resources:
       - Key: subnet-type
         Value: Public
   
-  PrivateSubnet1:
+  WebSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -70,11 +70,11 @@ Resources:
       AvailabilityZone: "us-east-1a"
       Tags:
       - Key: Name
-        Value: "Private Subnet 1"
+        Value: "Web Subnet 1"
       - Key: subnet-type
         Value: Private
       
-  PrivateSubnet2:
+  WebSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -83,7 +83,7 @@ Resources:
       AvailabilityZone: "us-east-1b"
       Tags:
       - Key: Name
-        Value: "Private Subnet 1"
+        Value: "Web Subnet 2"
       - Key: subnet-type
         Value: Private
   #RouteTable and associate
@@ -140,7 +140,8 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       SubnetId: !Ref PublicSubnet1
-      ImageId: !Ref AmiID #ami-02354e95b39ca8dec #Amazon Linux 2 AMI (HVM), SSD Volume Type64-bit Arm comes with five years support. It provides Linux kernel 4.14 tuned for optimal performance on Amazon EC2
+      #ImageId: !Ref AmiID #alternate way to refer. 
+      #ImageId: ami-02354e95b39ca8dec #Amazon Linux 2 AMI (HVM), SSD Volume Type64-bit Arm comes with five years support. It provides Linux kernel 4.14 tuned for optimal performance on Amazon EC2
       InstanceType: t3.medium
       KeyName:
         Ref: KeyName
@@ -165,14 +166,7 @@ Resources:
         IpProtocol: tcp
         ToPort: '22'   
   
-  # BastianEIP: #got get DNS?
-  #   Type: AWS::EC2::EIP
-  #   Properties:
-  #     Domain: vpc
-  #     InstanceId: !Ref BastianInstance
-  #     Tags:
-  #       - Key: Name
-  #         Value: GovProjectElasticIP
+  
 ########################################################################################################
 Outputs:
   VpcId:
@@ -214,7 +208,7 @@ Outputs:
 
 
 
-
+########################----Testing-Code-Dump---------###################
   #private
   # PrivateSubnetRouteTable:
   #   Type: AWS::EC2::RouteTable
@@ -238,3 +232,12 @@ Outputs:
   #       Ref: PrivateSubnetRouteTable
   #     SubnetId:
   #       Ref: PrivateSubnet2
+  # 
+  #BastianEIP: #got get DNS?
+  #   Type: AWS::EC2::EIP
+  #   Properties:
+  #     Domain: vpc
+  #     InstanceId: !Ref BastianInstance
+  #     Tags:
+  #       - Key: Name
+  #         Value: GovProjectElasticIP
