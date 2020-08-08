@@ -71,6 +71,8 @@ Resources:
       Tags:
       - Key: Name
         Value: "Private Subnet 1"
+      - Key: subnet-type
+        Value: Private
       
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
@@ -82,6 +84,8 @@ Resources:
       Tags:
       - Key: Name
         Value: "Private Subnet 1"
+      - Key: subnet-type
+        Value: Private
   #RouteTable and associate
   #Public
   PublicSubnetRouteTable:
@@ -161,14 +165,14 @@ Resources:
         IpProtocol: tcp
         ToPort: '22'   
   
-  WebServerEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      InstanceId: !Ref BastianInstance
-      Tags:
-        - Key: Name
-          Value: GovProjectElasticIP
+  # BastianEIP: #got get DNS?
+  #   Type: AWS::EC2::EIP
+  #   Properties:
+  #     Domain: vpc
+  #     InstanceId: !Ref BastianInstance
+  #     Tags:
+  #       - Key: Name
+  #         Value: GovProjectElasticIP
 ########################################################################################################
 Outputs:
   VpcId:
@@ -187,9 +191,9 @@ Outputs:
     Description: 'Public DNS of EC2 instance'
     Value: !GetAtt BastianInstance.PublicDnsName
   
-  WebServerElasticIP:
-    Description: 'Elastic IP assigned to EC2'
-    Value: !Ref WebServerEIP
+  # WebServerElasticIP:
+  #   Description: 'Elastic IP assigned to bastian instance'
+  #   Value: !Ref BastianEIP
   
   
 
