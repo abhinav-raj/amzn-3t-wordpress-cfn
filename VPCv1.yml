@@ -7,7 +7,7 @@ Parameters:
     AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
     ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
     Default: 0.0.0.0/0
-    Description: The IP address range that can be used to SSH to the EC2 instances
+    Description: The IP address range that can be used to SSH to the bastion & Web instances EC2 instances
     MaxLength: '18'
     MinLength: '9'
     Type: String
@@ -214,8 +214,75 @@ Resources:
           Value: Public
       VpcId: !Ref MyVPC
 
+  #-------------SecurityGroups Block-------------------------------------
+  BastionSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Allow http to client host- security group for Bastion instances
+        VpcId:
+          Ref: MyVPC
+        SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: '80'
+          IpProtocol: tcp
+          ToPort: '80'
+        - CidrIp: !Ref SSHLocation
+          FromPort: '22'
+          IpProtocol: tcp
+          ToPort: '22'  
+        Tags:
+        - Key: Name
+          Value: BastionSecurityGroup
+  
+  PublicAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ALB
+      GroupName: PublicAlb_SecurityGroup
+      SecurityGroupIngress:             #The inbound rules associated with the security group
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          # CidrIpv6: String
+          # Description: String
+          # SourcePrefixListId: String
+          # SourceSecurityGroupId: String
+          # SourceSecurityGroupName: String
+          # SourceSecurityGroupOwnerId: String
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      VpcId:
+        !Ref MyVPC    
+      Tags:
+        - Key: Name
+          Value: PublicAlbSecurityGroup   
 
-  #instances created from here     
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for web instances
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+      VpcId:
+        !Ref MyVPC 
+      Tags:
+        - Key: Name
+          Value: WebSecurityGroup 
+  #-------------instances created from here ------------------------------    
   #EC2 bastian 
   BastianInstance:
     Type: AWS::EC2::Instance
@@ -227,25 +294,11 @@ Resources:
       KeyName:
         Ref: KeyName
       SecurityGroupIds:
-        - !Ref PublicSecurityGroup
+        - !Ref BastionSecurityGroup
       Tags:
         - Key: Name
           Value: bastionHost
-  PublicSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow http to client host
-      VpcId:
-        Ref: MyVPC
-      SecurityGroupIngress:
-      - CidrIp: 0.0.0.0/0
-        FromPort: '80'
-        IpProtocol: tcp
-        ToPort: '80'
-      - CidrIp: !Ref SSHLocation
-        FromPort: '22'
-        IpProtocol: tcp
-        ToPort: '22'   
+  
   
   
 ########################################################################################################
@@ -277,6 +330,12 @@ Outputs:
     Value: !Ref WebSubnet1
   WebSubnet2:
     Value: !Ref WebSubnet2
+  BastionSecurityGroup:
+    Value: !Ref BastionSecurityGroup
+  PublicAlbSecurityGroup:
+    Value: !Ref PublicAlbSecurityGroup
+  WebSecurityGroup:
+    Value: !Ref WebSecurityGroup
   
   
 
