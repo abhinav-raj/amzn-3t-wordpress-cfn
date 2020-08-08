@@ -119,7 +119,7 @@ Resources:
     DependsOn:
       - VPCGW
   
-  #IgW defined
+  #InternetGateway IgW defined
   VPCIGW:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -127,20 +127,95 @@ Resources:
         - Key: Name
           Value: VPCIGW
 
-  #binds VPC and IgW
+  #VPCGatewayAttachment binds VPC and IgW
   VPCGW:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId:
         Ref: MyVPC
-      InternetGatewayId:
+      InternetGatewayId:        #The ID of the internet gateway.
         Ref: VPCIGW
+      #VpnGatewayId: String     You must specify either InternetGatewayId or VpnGatewayId, but not both.
+  #PrivateRT
+  NatEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      #InstanceId: String
+      #PublicIpv4Pool: String
+      Tags: 
+        - Key: Name
+          Value: NATElasticIP1
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    DependsOn: VPCGW
+    Properties:
+      AllocationId: #!GetAtt NatEIP1.AllocationId    #The allocation ID of an Elastic IP address to associate with the NAT gateway. If the Elastic IP address is associated with another resource, you must first disassociate it.
+        Fn::GetAtt:
+         - NatEIP1
+         - AllocationId
+      SubnetId: #!Ref PublicSubnet1                  #The public subnet in which to create the NAT gateway
+        Ref: PublicSubnet1
+      Tags:
+      - Key: Name
+        Value: NatGateway1
+  NatRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NatRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+      # DestinationIpv6CidrBlock: String
+      # EgressOnlyInternetGatewayId: String
+      # GatewayId: String
+      # InstanceId: String
+      # NetworkInterfaceId: String
+      # TransitGatewayId: String
+      # VpcPeeringConnectionId: String
+  NatRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', ['NatRouteTable1 / ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref MyVPC
+  
+  NatEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    DependsOn: VPCGW
+    Properties:
+      AllocationId: !GetAtt NatEIP2.AllocationId
+      SubnetId: !Ref PublicSubnet2
+  NatRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NatRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+  NatRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'NatRouteTable2 / ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref MyVPC
+
+
+  #instances created from here     
   #EC2 bastian 
   BastianInstance:
     Type: AWS::EC2::Instance
     Properties:
       SubnetId: !Ref PublicSubnet1
-      #ImageId: !Ref AmiID #alternate way to refer. 
+      ImageId: !Ref AmiID #alternate way to refer. 
       #ImageId: ami-02354e95b39ca8dec #Amazon Linux 2 AMI (HVM), SSD Volume Type64-bit Arm comes with five years support. It provides Linux kernel 4.14 tuned for optimal performance on Amazon EC2
       InstanceType: t3.medium
       KeyName:
