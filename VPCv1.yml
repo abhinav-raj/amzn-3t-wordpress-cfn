@@ -303,7 +303,7 @@ Resources:
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      SubnetId: !Ref WebSubnet1
+      SubnetId: !Ref PublicSubnet1
       #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
       InstanceType: t3.medium
@@ -416,6 +416,18 @@ Outputs:
   WebSecurityGroup:
     Value: !Ref WebSecurityGroup
   
+  WebServerPublicDNS:
+    Description: 'Public DNS of EC2 instance'
+    Value: !GetAtt WebServerInstance.PublicDnsName
+
+  WebServerElasticIP:
+    Description: 'Elastic IP assigned to EC2'
+    Value: !Ref WebServerEIP
+
+  WebsiteURL:
+    Value: !Sub http://${WebServerEIP}
+    Description: Application URL
+
   
 
 
