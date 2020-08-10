@@ -303,11 +303,14 @@ Resources:
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      IamInstanceProfile: !Ref WebServerInstanceProfile
+      SubnetId: !Ref WebSubnet1
+      #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
       InstanceType: t3.medium
+      KeyName:
+        Ref: KeyName
       SecurityGroupIds:
-        - !Ref WebServerSecurityGroup
+        - !Ref WebSecurityGroup
       Tags:
         - Key: Name
           Value:  webserverInstancePhp
