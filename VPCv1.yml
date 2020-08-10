@@ -86,7 +86,31 @@ Resources:
         Value: "Web Subnet 2"
       - Key: subnet-type
         Value: Private
+  DataSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: "us-east-1a"
+      CidrBlock: 10.0.101.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: DataSubnet1 
+        - Key: SubnetType
+          Value: Private
+      VpcId: !Ref MyVPC
   
+  DataSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: "us-east-1b"
+      CidrBlock: 10.0.102.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: DataSubnet2 
+        - Key: SubnetTypes
+          Value: Private
+      VpcId: !Ref MyVPC
   #----------------------------RouteTable and associate------------------------------------------
   #publicEIP
   WebServerEIP:
@@ -204,6 +228,17 @@ Resources:
         - Key: Network
           Value: Public
       VpcId: !Ref MyVPC
+
+  DataSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable1
+      SubnetId: !Ref DataSubnet1
+  DataSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable2
+      SubnetId: !Ref DataSubnet2
 ###-------------IgW and binding-------------------------------------------------------------###
   #InternetGateway IgW defined
   VPCIGW:
@@ -311,78 +346,10 @@ Resources:
   
   WebServerInstance:
     Type: AWS::EC2::Instance
-    # Metadata:
-    #   AWS::CloudFormation::Init:
-    #     config:
-    #       packages:
-    #         yum:
-    #           httpd: []
-    #           php: []
-
-    #       files:
-    #         /var/www/html/index.php:
-    #           content: |
-    #             <!DOCTYPE html>
-    #             <html>
-    #             <body>
-    #               <center>
-
-    #                 <?php
-    #                 # Get the instance ID from meta-data and store it in the $instance_id variable
-    #                 $url = "http://169.254.169.254/latest/meta-data/instance-id";
-    #                 $instance_id = file_get_contents($url);
-    #                 # Get the instance's availability zone from metadata and store it in the $zone variable
-    #                 $url = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
-    #                 $zone = file_get_contents($url);
-    #                 # Get the instance AMI ID and store it in the $ami_id variable
-    #                 $url = "http://169.254.169.254/latest/meta-data/ami-id";
-    #                 $ami_id = file_get_contents($url);
-    #                 ?>
-
-    #                 <h2>EC2 Instance ID: <?php echo $instance_id ?></h2>
-    #                 <h2>Availability Zone: <?php echo $zone ?></h2>
-    #                 <h2>AMI ID: <?php echo $ami_id ?></h2>
-
-    #               </center>
-    #             </body>
-    #             </html>
-    #           mode: 000644
-    #           owner: apache
-    #           group: apache
-
-    #         /etc/cfn/cfn-hup.conf:
-    #           content: !Sub |
-    #             [main]
-    #             stack=${AWS::StackId}
-    #             region=${AWS::Region}
-    #             interval=1
-    #           mode: 000400
-    #           owner: root
-    #           group: root
-
-    #         /etc/cfn/hooks.d/cfn-auto-reloader.conf:
-    #           content: !Sub |
-    #             [cfn-auto-reloader-hook]
-    #             triggers=post.update
-    #             path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init
-    #             action=/opt/aws/bin/cfn-init --stack ${AWS::StackName} --resource WebServerInstance --region ${AWS::Region}
-    #             runas=root
-
-    #       services:
-    #         sysvinit:
-    #           httpd:
-    #             enabled: true
-    #             ensureRunning: true
-
-    #           cfn-hup:
-    #             enabled: true
-    #             ensureRunning: true
-    #             files:
-    #               - /etc/cfn/cfn-hup.conf
-    #               - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+   
     Properties:
       SubnetId: !Ref PublicSubnet1
-      #IamInstanceProfile: !Ref WebServerInstanceProfile
+      IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
       InstanceType: t3.medium
       KeyName:
@@ -392,29 +359,7 @@ Resources:
       Tags:
         - Key: Name
           Value:  webserverInstancePhp
-      # UserData:
-      #   Fn::Base64:
-      #     !Sub |
-      #     #!/bin/bash -xe
-      #     # Update aws-cfn-bootstrap to the latest
-      #     yum install -y aws-cfn-bootstrap
-      #     # Call cfn-init script to install files and packages
-      #     /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource WebServerInstance --region ${AWS::Region}
-      #     # Call cfn-signal script to send a signal with exit code
-      #     /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName} --resource WebServerInstance --region ${AWS::Region}
-          
-          # yum install httpd php php-mysql -y
-          # amazon-linux-extras install -y php7.2
-          # cd /var/www/html
-          # wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          # tar -xzf wordpress-5.4.1.tar.gz
-          # cp -r wordpress/* /var/www/html/
-          # rm -rf wordpress
-          # rm -rf wordpress-5.4.1.tar.gz
-          # chmod -R 755 wp-content
-          # chown -R apache:apache wp-content
-          # service httpd start
-          # chkconfig httpd on
+      
       UserData:
         Fn::Base64: |
           #!/bin/bash
@@ -430,44 +375,7 @@ Resources:
           chown -R apache:apache wp-content
           service httpd start
           chkconfig httpd on
-      #     yum update -y
-      #     yum install -y httpd php
-      #     systemctl start httpd
-      #     systemctl enable httpd
-      #     usermod -a -G apache ec2-user
-      #     chown -R ec2-user:apache /var/www
-      #     chmod 2775 /var/www
-      #     find /var/www -type d -exec chmod 2775 {} \;
-      #     find /var/www -type f -exec chmod 0664 {} \;
-
-      #     # PHP script to display Instance ID and Availability Zone
-      #     cat << 'EOF' > /var/www/html/index.php
-      #       <!DOCTYPE html>
-      #       <html>
-      #       <body>
-      #         <center>
-
-      #           <?php
-      #           # Get the instance ID from meta-data and store it in the $instance_id variable
-      #           $url = "http://169.254.169.254/latest/meta-data/instance-id";
-      #           $instance_id = file_get_contents($url);
-      #           # Get the instance's availability zone from metadata and store it in the $zone variable
-      #           $url = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
-      #           $zone = file_get_contents($url);
-      #           # Get the instance AMI ID and store it in the $ami_id variable
-      #           $url = "http://169.254.169.254/latest/meta-data/ami-id";
-      #           $ami_id = file_get_contents($url);
-      #           ?>
-
-      #           <h2>EC2 Instance ID: <?php echo $instance_id ?></h2>
-      #           <h2>Availability Zone: <?php echo $zone ?></h2>
-      #           <h2>AMI ID: <?php echo $ami_id ?></h2>
-
-      #         </center>
-      #       </body>
-      #       </html>
-      #     EOF
-
+      
   
   
   
