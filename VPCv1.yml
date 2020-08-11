@@ -15,7 +15,72 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Description: 'The ID of the AMI.'
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  
+  DatabaseEncrpytedBoolean:
+    AllowedValues:
+      - true
+      - false
+    Default: True
+    Description: Indicates whether the DB instances in the cluster are encrypted.
+    Type: String
+  DatabaseCmk:
+    Description: AWS KMS Customer Master Key (CMK) to encrypt database cluster
+    Type: String
+  
+  # MultiAZDatabase:
+  #   Default: 'false'
+  #   Description: Create a Multi-AZ MySQL Amazon RDS database instance
+  #   Type: String
+  #   AllowedValues:
+  #     - 'true'
+  #     - 'false'
+  #   ConstraintDescription: must be either true or false.
+  # DBAllocatedStorage:
+  #   Default: '5'
+  #   Description: The size of the database (Gb)
+  #   Type: Number
+  #   MinValue: '5'
+  #   MaxValue: '1024'
+  #   ConstraintDescription: must be between 5 and 1024Gb.
 
+  DatabaseInstanceType:
+    AllowedValues:
+      - db.t2.small
+      - db.t2.medium
+      - db.r3.large
+      - db.r3.xlarge
+      - db.r3.2xlarge
+      - db.r3.4xlarge
+      - db.r3.8xlarge
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+    ConstraintDescription: Must be a valid RDS instance class.
+    Default: db.t2.medium
+    Description: The Amazon RDS database instance class.
+    Type: String
+  DatabaseMasterUsername:
+    AllowedPattern: ^([a-zA-Z0-9]*)$
+    Description: The Amazon RDS master username.
+    ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
+    MaxLength: 16
+    MinLength: 8
+    Type: String
+  DatabaseMasterPassword:
+    AllowedPattern: ^([a-z0-9A-Z`~!#$%^&*()_+,\\-])*$
+    ConstraintDescription: Must be letters (upper or lower), numbers, and these special characters '_'`~!#$%^&*()_+,-    
+    Description: The Amazon RDS master password.
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DatabaseName:
+    AllowedPattern: ^([a-zA-Z0-9]*)$
+    Description: The Amazon RDS master database name.
+    Type: String
 
 
 ########################################################################################################    
@@ -356,6 +421,7 @@ Resources:
         - Key: Name
           Value: bastionHost
   
+  #Note: its in Public, needs to be in provate
   WebServerInstance:
     Type: AWS::EC2::Instance
    
@@ -388,9 +454,6 @@ Resources:
           service httpd start
           chkconfig httpd on
       
-  
-  
-  
   #-------------------IAM---------------------------------------
   SSMIAMRole:
     Type: AWS::IAM::Role
@@ -412,7 +475,7 @@ Resources:
       Path: /
       Roles:
         - !Ref SSMIAMRole
-####----------------LB-------------------------------------------------------####
+####----------------LoadBalancer-------------------------------------------------------####
   PublicApplicationLoadBalancer: 
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -443,6 +506,130 @@ Resources:
         Value: 'ALB-TargetGroup'
       UnhealthyThresholdCount: 2    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
       VpcId: !Ref MyVPC
+##################------------------DATABASE-----------------------------###############################
+  # RDSCluster:
+  #   Type: AWS::RDS::DBCluster
+  #   Properties:
+  #     BackupRetentionPeriod: 30
+  #     DatabaseName: !Ref DatabaseName
+  #     DBSubnetGroupName: !Ref DataSubnetGroup
+  #     Engine: aurora-mysql
+  #     # KmsKeyId:
+  #     #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
+  #     MasterUsername: !Ref DatabaseMasterUsername
+  #     MasterUserPassword: !Ref DatabaseMasterPassword
+  #     Port: 3306          #The port number on which the DB instances in the DB cluster accept connections.
+  #     StorageEncrypted: !Ref DatabaseEncrpytedBoolean
+  #     #SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
+  #     Tags:
+  #       - Key: Name
+  #         Value: RDSCluster
+  #     VpcSecurityGroupIds:
+  #     - !Ref DatabaseSecurityGroup
+      
+  #     # AssociatedRoles: 
+  #     #   - DBClusterRole
+  #     # AvailabilityZones: 
+  #     #   - String
+  #     # BacktrackWindow: Long
+  #     # BackupRetentionPeriod: Integer
+  #     # DBClusterIdentifier: String
+  #     # DBClusterParameterGroupName: String
+  #     #DeletionProtection: Boolean
+  #     # EnableCloudwatchLogsExports: 
+  #     #   - String
+  #     # EnableHttpEndpoint: Boolean
+  #     #EnableIAMDatabaseAuthentication: Boolean
+  #     # EngineMode: String
+  #     # EngineVersion: String
+  #     # PreferredBackupWindow: String
+  #     # PreferredMaintenanceWindow: String
+  #     # ReplicationSourceIdentifier: String
+  #     # RestoreType: String
+  #     # ScalingConfiguration: 
+  #     #   ScalingConfiguration
+  #     # SourceDBClusterIdentifier: String
+  #     # SourceRegion: String
+  #     # StorageEncrypted: Boolean
+  #     # Tags: 
+  #     #   - Tag
+  #     # UseLatestRestorableTime: Boolean
+        
+  # DatabaseInstance1:
+  #   Type: AWS::RDS::DBInstance
+  #   DeletionPolicy: Delete
+  #   Properties:
+  #     AllowMajorVersionUpgrade: false
+  #     # AvailabilityZone: 
+  #     #   Fn::GetAtt:
+  #     #     - DataSubnet1
+  #     #     - AvailabilityZone
+  #     MultiAZ: true #!Ref MultiAZDatabase
+  #     AutoMinorVersionUpgrade: true
+  #     #DBClusterIdentifier: !Ref RDSCluster
+  #     DBInstanceClass: !Ref DatabaseInstanceType
+  #     #DBSubnetGroupName: !Ref DataSubnetGroup
+  #     Engine: aurora-mysql
+  #     Tags:
+  #       - Key: Name
+  #         Value: DatabaseInstance1
+  #     DBName: !Ref DatabaseName
+      
+  #     MasterUsername: !Ref DatabaseMasterUsername
+  #     MasterUserPassword: !Ref DatabaseMasterPassword
+  #     AllocatedStorage: !Ref DBAllocatedStorage
+  #     VPCSecurityGroups:
+  #       - !GetAtt 
+  #         - DatabaseSecurityGroup
+  #         - GroupId
+    
+    
+  DatabaseInstance1:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet1
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance1
+  
+  DatabaseInstance2:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet1
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance2
+  
+  DataSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
+      SubnetIds:
+        - !Ref DataSubnet1
+        - !Ref DataSubnet2
+      Tags:
+        - Key: Name
+          Value: DataSubnetGroup
 ########################################################################################################
 Outputs:
   VpcId:
