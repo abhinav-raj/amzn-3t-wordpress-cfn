@@ -659,7 +659,7 @@ Resources:
       DBParameterGroupName: 
         Ref: RDSDBParameterGroup
       DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysqlsss
+      Engine: aurora-mysql
       Tags:
         - Key: Name
           Value: DatabaseInstance2
