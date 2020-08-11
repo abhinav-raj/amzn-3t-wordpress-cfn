@@ -67,8 +67,9 @@ Parameters:
     Description: The Amazon RDS master username.
     ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
     MaxLength: 16
-    MinLength: 8
+    MinLength: 6
     Type: String
+    Default: wordpress
   DatabaseMasterPassword:
     AllowedPattern: ^([a-z0-9A-Z`~!#$%^&*()_+,\\-])*$
     ConstraintDescription: Must be letters (upper or lower), numbers, and these special characters '_'`~!#$%^&*()_+,-    
@@ -77,10 +78,12 @@ Parameters:
     MinLength: 8
     NoEcho: true
     Type: String
+    Default: wordpress
   DatabaseName:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master database name.
     Type: String
+    Default: wordpress
 
 
 ########################################################################################################    
@@ -618,8 +621,7 @@ Resources:
     Properties: 
       Description: "CloudFormation Sample Aurora Parameter Group"
       Family: aurora-mysql5.7 
-      Parameters: 
-        sql_mode: IGNORE_SPACE
+      
     Type: "AWS::RDS::DBParameterGroup"
   
   DatabaseInstance1:
@@ -649,7 +651,7 @@ Resources:
       AllowMajorVersionUpgrade: false
       AvailabilityZone: 
         Fn::GetAtt:
-          - DataSubnet1
+          - DataSubnet2
           - AvailabilityZone
       AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref RDSCluster
@@ -657,7 +659,7 @@ Resources:
       DBParameterGroupName: 
         Ref: RDSDBParameterGroup
       DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
+      Engine: aurora-mysqlsss
       Tags:
         - Key: Name
           Value: DatabaseInstance2
@@ -716,6 +718,10 @@ Outputs:
   WebsiteURL:
     Value: !Sub http://${WebServerEIP}
     Description: Application URL
+
+  DBEndPoint:
+    Value: !GetAtt RDSCluster.Endpoint.Address
+
 
   
 
