@@ -67,7 +67,7 @@ Parameters:
     Description: The Amazon RDS master username.
     ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
     MaxLength: 16
-    MinLength: 6
+    MinLength: 8
     Type: String
     Default: wordpress
   DatabaseMasterPassword:
@@ -128,7 +128,34 @@ Resources:
         Value: "Public Subnet 2"
       - Key: subnet-type
         Value: Public
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: MyVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: "us-east-1c"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: "Public Subnet 3"
+      - Key: subnet-type
+        Value: Public
   
+  PublicSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: MyVPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: "us-east-1e"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: "Public Subnet 4"
+      - Key: subnet-type
+        Value: Public
+
   WebSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -183,12 +210,25 @@ Resources:
   DataSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: "us-east-1e"
+      AvailabilityZone: "us-east-1c"
       CidrBlock: 10.0.103.0/24
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
           Value: DataSubnet3 
+        - Key: SubnetTypes
+          Value: Private
+      VpcId: !Ref MyVPC
+  
+  DataSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: "us-east-1e"
+      CidrBlock: 10.0.104.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: DataSubnet4
         - Key: SubnetTypes
           Value: Private
       VpcId: !Ref MyVPC
@@ -310,6 +350,70 @@ Resources:
           Value: Public
       VpcId: !Ref MyVPC
 
+  NatEIP3:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags: 
+        - Key: Name
+          Value: NATElasticIP3
+  NatGateway3:
+    Type: AWS::EC2::NatGateway
+    DependsOn: VPCGW
+    Properties:
+      AllocationId: !GetAtt NatEIP3.AllocationId
+      SubnetId: !Ref PublicSubnet3
+      Tags:
+      - Key: Name
+        Value: NatGateway3
+  NatRoute3:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NatRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway3
+  NatRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'NatRouteTable3 / ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref MyVPC
+
+  NatEIP4:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags: 
+        - Key: Name
+          Value: NATElasticIP4
+  NatGateway4:
+    Type: AWS::EC2::NatGateway
+    DependsOn: VPCGW
+    Properties:
+      AllocationId: !GetAtt NatEIP4.AllocationId
+      SubnetId: !Ref PublicSubnet4
+      Tags:
+      - Key: Name
+        Value: NatGateway4
+  NatRoute4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NatRouteTable4
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway4
+  NatRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'NatRouteTable4 / ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref MyVPC
+
   DataSubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -320,6 +424,16 @@ Resources:
     Properties:
       RouteTableId: !Ref NatRouteTable2
       SubnetId: !Ref DataSubnet2
+  DataSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable3
+      SubnetId: !Ref DataSubnet3
+  DataSubnetRouteTableAssociation4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable4
+      SubnetId: !Ref DataSubnet4
 ###-------------IgW and binding-------------------------------------------------------------###
   #InternetGateway IgW defined
   VPCIGW:
@@ -448,114 +562,6 @@ Resources:
 
   WebServerInstance:
     Type: AWS::EC2::Instance
-    Metadata:
-      'AWS::CloudFormation::Init':
-        config:
-          packages:
-            yum:
-              httpd: []
-              php: []
-        configSets:
-          wordpress_install:
-            - install_cfn
-            - install_wordpress
-        install_cfn:
-          files:
-            /etc/cfn/cfn-hup.conf:
-              content: !Join 
-                - ''
-                - - |
-                    [main]
-                  - stack=
-                  - !Ref 'AWS::StackId'
-                  - |+
-
-                  - region=
-                  - !Ref 'AWS::Region'
-                  - |+
-
-              mode: '000400'
-              owner: root
-              group: root
-            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
-              content: !Join 
-                - ''
-                - - |
-                    [cfn-auto-reloader-hook]
-                  - |
-                    triggers=post.update
-                  - |
-                    path=Resources.WebServer.Metadata.AWS::CloudFormation::Init
-                  - 'action=/opt/aws/bin/cfn-init -v '
-                  - '         --stack '
-                  - !Ref 'AWS::StackName'
-                  - '         --resource WebServer '
-                  - '         --configsets wordpress_install '
-                  - '         --region '
-                  - !Ref 'AWS::Region'
-                  - |+
-
-              mode: '000400'
-              owner: root
-              group: root
-          services:
-            sysvinit:
-              cfn-hup:
-                enabled: 'true'
-                ensureRunning: 'true'
-                files:
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-        install_wordpress:
-          packages:
-            yum:
-              php: []
-              php-mysql: []
-              mysql: []
-              mysql-server: []
-              mysql-devel: []
-              mysql-libs: []
-              httpd: []
-          sources:
-            /var/www/html: 'http://wordpress.org/latest.tar.gz'
-          files:
-            
-            /tmp/create-wp-config:
-              content: !Join 
-                - ''
-                - - |
-                    #!/bin/bash -xe
-                  - >
-                    cp /var/www/html/wordpress/wp-config-sample.php
-                    /var/www/html/wordpress/wp-config.php
-                  - sed -i "s/'database_name_here'/'
-                  - !Ref DatabaseName
-                  - |
-                    '/g" wp-config.php
-                  - sed -i "s/'username_here'/'
-                  - !Ref DatabaseMasterUsername
-                  - |
-                    '/g" wp-config.php
-                  - sed -i "s/'password_here'/'
-                  - !Ref DatabaseMasterPassword
-                  - |
-                    '/g" wp-config.php
-                  - sed -i "s/'localhost'/'
-                  - !GetAtt RDSCluster.Endpoint.Address
-                  - |
-                    '/g" wp-config.php
-              mode: '000500'
-              owner: root
-              group: root
-          services:
-            sysvinit:
-              httpd:
-                enabled: 'true'
-                ensureRunning: 'true'
-              mysqld:
-                enabled: 'true'
-                ensureRunning: 'true'
-   
     Properties:
       SubnetId: !Ref PublicSubnet1
       IamInstanceProfile: !Ref WebServerInstanceProfile
@@ -570,12 +576,11 @@ Resources:
           Value:  webserverInstancePhp
       
       UserData:
-        Fn::Base64: |
+        Fn::Base64: 
           #!/bin/bash
           yum install httpd php php-mysql -y
           amazon-linux-extras install -y php7.2
           cd /var/www/html
-
           wget https://wordpress.org/wordpress-5.4.1.tar.gz
           tar -xzf wordpress-5.4.1.tar.gz
           cp -r wordpress/* /var/www/html/
@@ -585,6 +590,306 @@ Resources:
           chown -R apache:apache wp-content
           service httpd start
           chkconfig httpd on
+
+          
+
+  #-------------------IAM---------------------------------------
+  SSMIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  WebServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SSMIAMRole
+####----------------LoadBalancer-------------------------------------------------------####
+  PublicApplicationLoadBalancer: 
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+        - !Ref WebSubnet1
+        - !Ref WebSubnet2
+      SecurityGroups:
+      - !Ref PublicAlbSecurityGroup
+      Tags:
+      - Key: Name
+        Value:  'Public ALB' 
+
+
+  PublicAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /wp-login.php
+      HealthCheckTimeoutSeconds: 5
+      Name: 'ALB-TargetGroup'
+      Port: 80                      #The port on which the targets receive traffic. This port is used unless you specify a port override when registering the target. 
+      Protocol: HTTP                #he protocol to use for routing traffic to the targets. For Application Load Balancers, the supported protocols are HTTP and HTTPS.
+      #HealthCheckPort
+      #HealthCheckProtocol
+      Tags:
+      - Key: Name
+        Value: 'ALB-TargetGroup'
+      UnhealthyThresholdCount: 2    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
+      VpcId: !Ref MyVPC
+##################------------------DATABASE-----------------------------###############################
+  
+    
+  RDSCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterParameterGroupName: 
+        Ref: RDSDBClusterParameterGroup
+      BackupRetentionPeriod: 30
+      DatabaseName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      # KmsKeyId:
+      #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
+      MasterUsername: !Ref DatabaseMasterUsername
+      MasterUserPassword: !Ref DatabaseMasterPassword
+      Port: 3306
+      StorageEncrypted: !Ref DatabaseEncrpytedBoolean
+      # SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
+      Tags:
+        - Key: Name
+          Value: RDSCluster
+      VpcSecurityGroupIds:
+      - !Ref DatabaseSecurityGroup  
+  
+  RDSDBClusterParameterGroup: # Error Msg- The Parameter Group default.aurora5.6 with DBParameterGroupFamily aurora5.6 cannot be used for this instance. Please use a Parameter Group with DBParameterGroupFamily aurora-mysql5.7 (Service: AmazonRDS; Status Code: 400; Error Code: InvalidParameterCombination; Request ID: 147358c4-1e3b-419e-90c9-7a64d7902f46)
+    Properties: 
+      Description: "CloudFormation Sample Aurora Cluster Parameter Group"
+      Family: aurora-mysql5.7 
+      Parameters: 
+        time_zone: US/Eastern
+    Type: "AWS::RDS::DBClusterParameterGroup"
+  
+  RDSDBParameterGroup: 
+    Properties: 
+      Description: "CloudFormation Sample Aurora Parameter Group"
+      Family: aurora-mysql5.7 
+      
+    Type: "AWS::RDS::DBParameterGroup"
+  
+  DatabaseInstance1:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet1
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance1
+  
+  DatabaseInstance2:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet2
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance2
+  DatabaseInstance3:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet3
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance3
+  DatabaseInstance4:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet4
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance4
+
+
+  DataSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
+      SubnetIds:
+        - !Ref DataSubnet1
+        - !Ref DataSubnet2
+        - !Ref DataSubnet3
+        - !Ref DataSubnet4
+      Tags:
+        - Key: Name
+          Value: DataSubnetGroup
+
+
+
+
+
+
+
+
+
+########################################################################################################
+Outputs:
+  VpcId:
+    Value: !Ref MyVPC
+
+  PublicSubnet1:
+    Value: !Ref PublicSubnet1
+
+  PublicSubnet2:
+    Value: !Ref PublicSubnet2
+  
+  PublicIP:
+    Description: EC2 public IP
+    Value: !GetAtt BastianInstance.PublicIp
+  PublicDNS:
+    Description: 'Public DNS of EC2 instance'
+    Value: !GetAtt BastianInstance.PublicDnsName
+  
+  # WebServerElasticIP:
+  #   Description: 'Elastic IP assigned to bastian instance'
+  #   Value: !Ref BastianEIP
+  
+  WebSubnet1:
+    Value: !Ref WebSubnet1
+  WebSubnet2:
+    Value: !Ref WebSubnet2
+  BastionSecurityGroup:
+    Value: !Ref BastionSecurityGroup
+  PublicAlbSecurityGroup:
+    Value: !Ref PublicAlbSecurityGroup
+  WebSecurityGroup:
+    Value: !Ref WebSecurityGroup
+  
+  WebServerPublicDNS:
+    Description: 'Public DNS of EC2 instance'
+    Value: !GetAtt WebServerInstance.PublicDnsName
+
+  WebServerElasticIP:
+    Description: 'Elastic IP assigned to EC2'
+    Value: !Ref WebServerEIP
+
+  WebsiteURL:
+    Value: !Sub http://${WebServerEIP}
+    Description: Application URL
+
+  DBEndPoint:
+    Value: !GetAtt RDSCluster.Endpoint.Address
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################----Testing-Code-Dump---------###################
+  #private
+  # PrivateSubnetRouteTable:
+  #   Type: AWS::EC2::RouteTable
+  #   Properties:
+  #     VpcId: !Ref MyVPC
+  #     Tags:
+  #       - Key: Name
+  #         Value: "Private Route"
+        
+  # PrivateSubnetRouteTableAssociation:
+  #   Type: AWS::EC2::SubnetRouteTableAssociation
+  #   Properties:
+  #     RouteTableId:
+  #       Ref: PrivateSubnetRouteTable
+  #     SubnetId:
+  #       Ref: PrivateSubnet1
+  # PrivateSubnetRouteTableAssociation:
+  #   Type: AWS::EC2::SubnetRouteTableAssociation
+  #   Properties:
+  #     RouteTableId:
+  #       Ref: PrivateSubnetRouteTable
+  #     SubnetId:
+  #       Ref: PrivateSubnet2
+  # 
+  #BastianEIP: #got get DNS?
+  #   Type: AWS::EC2::EIP
+  #   Properties:
+  #     Domain: vpc
+  #     InstanceId: !Ref BastianInstance
+  #     Tags:
+  #       - Key: Name
+  #         Value: GovProjectElasticIP
+
+
+
+
 
           
   
@@ -785,59 +1090,9 @@ Resources:
   #   CreationPolicy:
   #     ResourceSignal:
   #       Timeout: PT15M      
-  #-------------------IAM---------------------------------------
-  SSMIAMRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
-  WebServerInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref SSMIAMRole
-####----------------LoadBalancer-------------------------------------------------------####
-  PublicApplicationLoadBalancer: 
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internet-facing
-      Subnets:
-        - !Ref WebSubnet1
-        - !Ref WebSubnet2
-      SecurityGroups:
-      - !Ref PublicAlbSecurityGroup
-      Tags:
-      - Key: Name
-        Value:  'Public ALB' 
 
 
-  PublicAlbTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 10
-      HealthCheckPath: /wp-login.php
-      HealthCheckTimeoutSeconds: 5
-      Name: 'ALB-TargetGroup'
-      Port: 80                      #The port on which the targets receive traffic. This port is used unless you specify a port override when registering the target. 
-      Protocol: HTTP                #he protocol to use for routing traffic to the targets. For Application Load Balancers, the supported protocols are HTTP and HTTPS.
-      #HealthCheckPort
-      #HealthCheckProtocol
-      Tags:
-      - Key: Name
-        Value: 'ALB-TargetGroup'
-      UnhealthyThresholdCount: 2    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
-      VpcId: !Ref MyVPC
-##################------------------DATABASE-----------------------------###############################
+
   # 
     # RDSCluster:
     #   Type: AWS::RDS::DBCluster
@@ -914,221 +1169,3 @@ Resources:
       #       - !GetAtt 
       #         - DatabaseSecurityGroup
       #         - GroupId
-    
-  RDSCluster:
-    Type: AWS::RDS::DBCluster
-    Properties:
-      DBClusterParameterGroupName: 
-        Ref: RDSDBClusterParameterGroup
-      BackupRetentionPeriod: 30
-      DatabaseName: !Ref DatabaseName
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      # KmsKeyId:
-      #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
-      MasterUsername: !Ref DatabaseMasterUsername
-      MasterUserPassword: !Ref DatabaseMasterPassword
-      Port: 3306
-      StorageEncrypted: !Ref DatabaseEncrpytedBoolean
-      # SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
-      Tags:
-        - Key: Name
-          Value: RDSCluster
-      VpcSecurityGroupIds:
-      - !Ref DatabaseSecurityGroup  
-  
-  RDSDBClusterParameterGroup: # Error Msg- The Parameter Group default.aurora5.6 with DBParameterGroupFamily aurora5.6 cannot be used for this instance. Please use a Parameter Group with DBParameterGroupFamily aurora-mysql5.7 (Service: AmazonRDS; Status Code: 400; Error Code: InvalidParameterCombination; Request ID: 147358c4-1e3b-419e-90c9-7a64d7902f46)
-    Properties: 
-      Description: "CloudFormation Sample Aurora Cluster Parameter Group"
-      Family: aurora-mysql5.7 
-      Parameters: 
-        time_zone: US/Eastern
-    Type: "AWS::RDS::DBClusterParameterGroup"
-  
-  RDSDBParameterGroup: 
-    Properties: 
-      Description: "CloudFormation Sample Aurora Parameter Group"
-      Family: aurora-mysql5.7 
-      
-    Type: "AWS::RDS::DBParameterGroup"
-  
-  DatabaseInstance1:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet1
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance1
-  
-  DatabaseInstance2:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet2
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance2
-  DatabaseInstance3:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet3
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance3
-
-  DataSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
-      SubnetIds:
-        - !Ref DataSubnet1
-        - !Ref DataSubnet2
-        - !Ref DataSubnet3
-      Tags:
-        - Key: Name
-          Value: DataSubnetGroup
-
-
-
-
-
-
-
-
-
-########################################################################################################
-Outputs:
-  VpcId:
-    Value: !Ref MyVPC
-
-  PublicSubnet1:
-    Value: !Ref PublicSubnet1
-
-  PublicSubnet2:
-    Value: !Ref PublicSubnet2
-  
-  PublicIP:
-    Description: EC2 public IP
-    Value: !GetAtt BastianInstance.PublicIp
-  PublicDNS:
-    Description: 'Public DNS of EC2 instance'
-    Value: !GetAtt BastianInstance.PublicDnsName
-  
-  # WebServerElasticIP:
-  #   Description: 'Elastic IP assigned to bastian instance'
-  #   Value: !Ref BastianEIP
-  
-  WebSubnet1:
-    Value: !Ref WebSubnet1
-  WebSubnet2:
-    Value: !Ref WebSubnet2
-  BastionSecurityGroup:
-    Value: !Ref BastionSecurityGroup
-  PublicAlbSecurityGroup:
-    Value: !Ref PublicAlbSecurityGroup
-  WebSecurityGroup:
-    Value: !Ref WebSecurityGroup
-  
-  WebServerPublicDNS:
-    Description: 'Public DNS of EC2 instance'
-    Value: !GetAtt WebServerInstance.PublicDnsName
-
-  WebServerElasticIP:
-    Description: 'Elastic IP assigned to EC2'
-    Value: !Ref WebServerEIP
-
-  WebsiteURL:
-    Value: !Sub http://${WebServerEIP}
-    Description: Application URL
-
-  DBEndPoint:
-    Value: !GetAtt RDSCluster.Endpoint.Address
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-########################----Testing-Code-Dump---------###################
-  #private
-  # PrivateSubnetRouteTable:
-  #   Type: AWS::EC2::RouteTable
-  #   Properties:
-  #     VpcId: !Ref MyVPC
-  #     Tags:
-  #       - Key: Name
-  #         Value: "Private Route"
-        
-  # PrivateSubnetRouteTableAssociation:
-  #   Type: AWS::EC2::SubnetRouteTableAssociation
-  #   Properties:
-  #     RouteTableId:
-  #       Ref: PrivateSubnetRouteTable
-  #     SubnetId:
-  #       Ref: PrivateSubnet1
-  # PrivateSubnetRouteTableAssociation:
-  #   Type: AWS::EC2::SubnetRouteTableAssociation
-  #   Properties:
-  #     RouteTableId:
-  #       Ref: PrivateSubnetRouteTable
-  #     SubnetId:
-  #       Ref: PrivateSubnet2
-  # 
-  #BastianEIP: #got get DNS?
-  #   Type: AWS::EC2::EIP
-  #   Properties:
-  #     Domain: vpc
-  #     InstanceId: !Ref BastianInstance
-  #     Tags:
-  #       - Key: Name
-  #         Value: GovProjectElasticIP
