@@ -507,83 +507,121 @@ Resources:
       UnhealthyThresholdCount: 2    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
       VpcId: !Ref MyVPC
 ##################------------------DATABASE-----------------------------###############################
-  # RDSCluster:
-  #   Type: AWS::RDS::DBCluster
-  #   Properties:
-  #     BackupRetentionPeriod: 30
-  #     DatabaseName: !Ref DatabaseName
-  #     DBSubnetGroupName: !Ref DataSubnetGroup
-  #     Engine: aurora-mysql
-  #     # KmsKeyId:
-  #     #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
-  #     MasterUsername: !Ref DatabaseMasterUsername
-  #     MasterUserPassword: !Ref DatabaseMasterPassword
-  #     Port: 3306          #The port number on which the DB instances in the DB cluster accept connections.
-  #     StorageEncrypted: !Ref DatabaseEncrpytedBoolean
-  #     #SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
-  #     Tags:
-  #       - Key: Name
-  #         Value: RDSCluster
-  #     VpcSecurityGroupIds:
-  #     - !Ref DatabaseSecurityGroup
-      
-  #     # AssociatedRoles: 
-  #     #   - DBClusterRole
-  #     # AvailabilityZones: 
-  #     #   - String
-  #     # BacktrackWindow: Long
-  #     # BackupRetentionPeriod: Integer
-  #     # DBClusterIdentifier: String
-  #     # DBClusterParameterGroupName: String
-  #     #DeletionProtection: Boolean
-  #     # EnableCloudwatchLogsExports: 
-  #     #   - String
-  #     # EnableHttpEndpoint: Boolean
-  #     #EnableIAMDatabaseAuthentication: Boolean
-  #     # EngineMode: String
-  #     # EngineVersion: String
-  #     # PreferredBackupWindow: String
-  #     # PreferredMaintenanceWindow: String
-  #     # ReplicationSourceIdentifier: String
-  #     # RestoreType: String
-  #     # ScalingConfiguration: 
-  #     #   ScalingConfiguration
-  #     # SourceDBClusterIdentifier: String
-  #     # SourceRegion: String
-  #     # StorageEncrypted: Boolean
-  #     # Tags: 
-  #     #   - Tag
-  #     # UseLatestRestorableTime: Boolean
+  # 
+    # RDSCluster:
+    #   Type: AWS::RDS::DBCluster
+    #   Properties:
+    #     BackupRetentionPeriod: 30
+    #     DatabaseName: !Ref DatabaseName
+    #     DBSubnetGroupName: !Ref DataSubnetGroup
+    #     Engine: aurora-mysql
+    #     # KmsKeyId:
+    #     #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
+    #     MasterUsername: !Ref DatabaseMasterUsername
+    #     MasterUserPassword: !Ref DatabaseMasterPassword
+    #     Port: 3306          #The port number on which the DB instances in the DB cluster accept connections.
+    #     StorageEncrypted: !Ref DatabaseEncrpytedBoolean
+    #     #SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
+    #     Tags:
+    #       - Key: Name
+    #         Value: RDSCluster
+    #     VpcSecurityGroupIds:
+    #     - !Ref DatabaseSecurityGroup
         
-  # DatabaseInstance1:
-  #   Type: AWS::RDS::DBInstance
-  #   DeletionPolicy: Delete
-  #   Properties:
-  #     AllowMajorVersionUpgrade: false
-  #     # AvailabilityZone: 
-  #     #   Fn::GetAtt:
-  #     #     - DataSubnet1
-  #     #     - AvailabilityZone
-  #     MultiAZ: true #!Ref MultiAZDatabase
-  #     AutoMinorVersionUpgrade: true
-  #     #DBClusterIdentifier: !Ref RDSCluster
-  #     DBInstanceClass: !Ref DatabaseInstanceType
-  #     #DBSubnetGroupName: !Ref DataSubnetGroup
-  #     Engine: aurora-mysql
-  #     Tags:
-  #       - Key: Name
-  #         Value: DatabaseInstance1
-  #     DBName: !Ref DatabaseName
-      
-  #     MasterUsername: !Ref DatabaseMasterUsername
-  #     MasterUserPassword: !Ref DatabaseMasterPassword
-  #     AllocatedStorage: !Ref DBAllocatedStorage
-  #     VPCSecurityGroups:
-  #       - !GetAtt 
-  #         - DatabaseSecurityGroup
-  #         - GroupId
+        # AssociatedRoles: 
+        #   - DBClusterRole
+        # AvailabilityZones: 
+        #   - String
+        # BacktrackWindow: Long
+        # BackupRetentionPeriod: Integer
+        # DBClusterIdentifier: String
+        # DBClusterParameterGroupName: String
+        #DeletionProtection: Boolean
+        # EnableCloudwatchLogsExports: 
+        #   - String
+        # EnableHttpEndpoint: Boolean
+        #EnableIAMDatabaseAuthentication: Boolean
+        # EngineMode: String
+        # EngineVersion: String
+        # PreferredBackupWindow: String
+        # PreferredMaintenanceWindow: String
+        # ReplicationSourceIdentifier: String
+        # RestoreType: String
+        # ScalingConfiguration: 
+        #   ScalingConfiguration
+        # SourceDBClusterIdentifier: String
+        # SourceRegion: String
+        # StorageEncrypted: Boolean
+        # Tags: 
+        #   - Tag
+        # UseLatestRestorableTime: Boolean
+          
+      # DatabaseInstance1:
+      #   Type: AWS::RDS::DBInstance
+      #   DeletionPolicy: Delete
+      #   Properties:
+      #     AllowMajorVersionUpgrade: false
+      #     # AvailabilityZone: 
+      #     #   Fn::GetAtt:
+      #     #     - DataSubnet1
+      #     #     - AvailabilityZone
+      #     MultiAZ: true #!Ref MultiAZDatabase
+      #     AutoMinorVersionUpgrade: true
+      #     #DBClusterIdentifier: !Ref RDSCluster
+      #     DBInstanceClass: !Ref DatabaseInstanceType
+      #     #DBSubnetGroupName: !Ref DataSubnetGroup
+      #     Engine: aurora-mysql
+      #     Tags:
+      #       - Key: Name
+      #         Value: DatabaseInstance1
+      #     DBName: !Ref DatabaseName
+          
+      #     MasterUsername: !Ref DatabaseMasterUsername
+      #     MasterUserPassword: !Ref DatabaseMasterPassword
+      #     AllocatedStorage: !Ref DBAllocatedStorage
+      #     VPCSecurityGroups:
+      #       - !GetAtt 
+      #         - DatabaseSecurityGroup
+      #         - GroupId
     
-    
+  RDSCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterParameterGroupName: 
+        Ref: RDSDBClusterParameterGroup
+      BackupRetentionPeriod: 30
+      DatabaseName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      # KmsKeyId:
+      #   !If [ UseAWS-ManagedCMK, !Ref 'AWS::NoValue', !Ref DatabaseCmk ]
+      MasterUsername: !Ref DatabaseMasterUsername
+      MasterUserPassword: !Ref DatabaseMasterPassword
+      Port: 3306
+      StorageEncrypted: !Ref DatabaseEncrpytedBoolean
+      # SnapshotIdentifier: !If [ NoSnapshot, !Ref 'AWS::NoValue', !Ref DatabaseRestoreSnapshot]
+      Tags:
+        - Key: Name
+          Value: RDSCluster
+      VpcSecurityGroupIds:
+      - !Ref DatabaseSecurityGroup  
+  
+  RDSDBClusterParameterGroup: # Error Msg- The Parameter Group default.aurora5.6 with DBParameterGroupFamily aurora5.6 cannot be used for this instance. Please use a Parameter Group with DBParameterGroupFamily aurora-mysql5.7 (Service: AmazonRDS; Status Code: 400; Error Code: InvalidParameterCombination; Request ID: 147358c4-1e3b-419e-90c9-7a64d7902f46)
+    Properties: 
+      Description: "CloudFormation Sample Aurora Cluster Parameter Group"
+      Family: aurora-mysql5.7 
+      Parameters: 
+        time_zone: US/Eastern
+    Type: "AWS::RDS::DBClusterParameterGroup"
+  
+  RDSDBParameterGroup: 
+    Properties: 
+      Description: "CloudFormation Sample Aurora Parameter Group"
+      Family: aurora-mysql5.7 
+      Parameters: 
+        sql_mode: IGNORE_SPACE
+    Type: "AWS::RDS::DBParameterGroup"
+  
   DatabaseInstance1:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
@@ -596,6 +634,8 @@ Resources:
       AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref RDSCluster
       DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
       DBSubnetGroupName: !Ref DataSubnetGroup
       Engine: aurora-mysql
       Tags:
@@ -614,6 +654,8 @@ Resources:
       AutoMinorVersionUpgrade: true
       DBClusterIdentifier: !Ref RDSCluster
       DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
       DBSubnetGroupName: !Ref DataSubnetGroup
       Engine: aurora-mysql
       Tags:
