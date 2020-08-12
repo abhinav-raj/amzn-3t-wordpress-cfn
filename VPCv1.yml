@@ -100,7 +100,7 @@ Resources:
       Tags:
         - Key: Name
           Value: GovClientVPC
- #-----------------------Subnet Block-----------------------------   
+#-----------------------Subnet Block-----------------------------   
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -232,7 +232,7 @@ Resources:
         - Key: SubnetTypes
           Value: Private
       VpcId: !Ref MyVPC
-  #----------------------------RouteTable and associate------------------------------------------
+#----------------------------RouteTable and associate------------------------------------------
   #publicEIP
   WebServerEIP:
     Type: AWS::EC2::EIP
@@ -559,38 +559,6 @@ Resources:
   
   #Note: its in Public, needs to be in provate
   
-
-  # WebServerInstance:
-  #   Type: AWS::EC2::Instance
-  #   Properties:
-  #     SubnetId: !Ref PublicSubnet1
-  #     IamInstanceProfile: !Ref WebServerInstanceProfile
-  #     ImageId: !Ref AmiID
-  #     InstanceType: t3.medium
-  #     KeyName:
-  #       Ref: KeyName
-  #     SecurityGroupIds:
-  #       - !Ref WebSecurityGroup
-  #     Tags:
-  #       - Key: Name
-  #         Value:  webserverInstancePhp
-      
-  #     UserData:
-  #       Fn::Base64: 
-  #         #!/bin/bash
-  #         yum install httpd php php-mysql -y
-  #         amazon-linux-extras install -y php7.2
-  #         cd /var/www/html
-  #         wget https://wordpress.org/wordpress-5.4.1.tar.gz
-  #         tar -xzf wordpress-5.4.1.tar.gz
-  #         cp -r wordpress/* /var/www/html/
-  #         rm -rf wordpress
-  #         rm -rf wordpress-5.4.1.tar.gz
-  #         chmod -R 755 wp-content
-  #         chown -R apache:apache wp-content
-  #         service httpd start
-  #         chkconfig httpd on
-
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -598,6 +566,8 @@ Resources:
       ImageId: !Ref AmiID
       SubnetId: !Ref PublicSubnet1
       InstanceType: t3.medium
+      KeyName:
+        Ref: KeyName
       SecurityGroupIds:
         - !Ref WebSecurityGroup
       Tags:
@@ -620,27 +590,12 @@ Resources:
           chkconfig httpd on
 
           # wp-config.php
-          cat << 'EOF' > /var/www/html/wp-config.php
-            <?php
-            define( 'DB_NAME', 'wordpress' );
-
-            /** MySQL database username */
-            define( 'DB_USER', 'wordpress' );
-            /** MySQL database password */
-            define( 'DB_PASSWORD', 'wordpress' );
-            /** MySQL hostname */
-            define( 'DB_HOST', 'wordpress.ctgowpelklg8.us-east-2.rds.amazonaws.com' );
-            /** Database Charset to use in creating database tables. */
-            define( 'DB_CHARSET', 'utf8mb4' );
-            /** The Database Collate type. Don't change this if in doubt. */
-            define( 'DB_COLLATE', '' );
-            $table_prefix = 'wp_';
-            define( 'WP_DEBUG', false );
-            if ( ! defined( 'ABSPATH' ) ) {
-              define( 'ABSPATH', __DIR__ . '/' );
-            }
-            require_once ABSPATH . 'wp-settings.php';
-          EOF      
+          sudo su
+          cp wp-config-sample.php  wp-config.php
+          sed -i "s/'database_name_here'/' ${DatabaseName} '/g" wp-config.php
+          sed -i "s/'username_here'/' ${DatabaseMasterUsername} '/g" wp-config.php
+          sed -i "s/'password_here'/' ${DatabaseMasterPassword} '/g" wp-config.php
+          sed -i "s/'localhost'/' ${DBEndPoint} '/g" wp-config.php
 
 #-------------------IAM---------------------------------------
   SSMIAMRole:
