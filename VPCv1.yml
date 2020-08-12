@@ -594,7 +594,7 @@ Resources:
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      IamInstanceProfile: !Ref WebServerInstanceProfile
+      #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
       SubnetId: !Ref PublicSubnet1
       InstanceType: t3.medium
@@ -606,38 +606,40 @@ Resources:
       UserData:
         Fn::Base64: |
           #!/bin/bash
-          yum update -y
-          yum install -y httpd php
-          systemctl start httpd
-          systemctl enable httpd
-          usermod -a -G apache ec2-user
-          chown -R ec2-user:apache /var/www
-          chmod 2775 /var/www
-          find /var/www -type d -exec chmod 2775 {} \;
-          find /var/www -type f -exec chmod 0664 {} \;
+          yum install httpd php php-mysql -y
+          amazon-linux-extras install -y php7.2
+          cd /var/www/html
+          wget https://wordpress.org/wordpress-5.4.1.tar.gz
+          tar -xzf wordpress-5.4.1.tar.gz
+          cp -r wordpress/* /var/www/html/
+          rm -rf wordpress
+          rm -rf wordpress-5.4.1.tar.gz
+          chmod -R 755 wp-content
+          chown -R apache:apache wp-content
+          service httpd start
+          chkconfig httpd on
 
-          # PHP script to display Instance ID and Availability Zone
-          cat << 'EOF' > /var/www/html/index.php
-            <!DOCTYPE html>
-            <html>
-            <body>
-              <center>
+          # wp-config.php
+          cat << 'EOF' > /var/www/html/wp-config.php
+            <?php
+            define( 'DB_NAME', 'wordpress' );
 
-                <?php
-                # Get the instance ID from meta-data and store it in the $instance_id variable
-                $url = "http://169.254.169.254/latest/meta-data/instance-id";
-                $instance_id = file_get_contents($url);
-                # Get the instance's availability zone from metadata and store it in the $zone variable
-                $url = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
-                $zone = file_get_contents($url);
-                ?>
-
-                <h2>EC2 Instance ID: <?php echo $instance_id ?></h2>
-                <h2>Availability Zone: <?php echo $zone ?></h2>
-
-              </center>
-            </body>
-            </html>
+            /** MySQL database username */
+            define( 'DB_USER', 'wordpress' );
+            /** MySQL database password */
+            define( 'DB_PASSWORD', 'wordpress' );
+            /** MySQL hostname */
+            define( 'DB_HOST', 'wordpress.ctgowpelklg8.us-east-2.rds.amazonaws.com' );
+            /** Database Charset to use in creating database tables. */
+            define( 'DB_CHARSET', 'utf8mb4' );
+            /** The Database Collate type. Don't change this if in doubt. */
+            define( 'DB_COLLATE', '' );
+            $table_prefix = 'wp_';
+            define( 'WP_DEBUG', false );
+            if ( ! defined( 'ABSPATH' ) ) {
+              define( 'ABSPATH', __DIR__ . '/' );
+            }
+            require_once ABSPATH . 'wp-settings.php';
           EOF      
 
 #-------------------IAM---------------------------------------
