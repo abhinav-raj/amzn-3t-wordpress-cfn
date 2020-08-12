@@ -181,18 +181,18 @@ Resources:
         Value: "Web Subnet 2"
       - Key: subnet-type
         Value: Private
-  DataSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: "us-east-1a"
-      CidrBlock: 10.0.101.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: DataSubnet1 
-        - Key: SubnetType
-          Value: Private
-      VpcId: !Ref MyVPC
+  # DataSubnet1:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     AvailabilityZone: "us-east-1a"
+  #     CidrBlock: 10.0.101.0/24
+  #     MapPublicIpOnLaunch: false
+  #     Tags:
+  #       - Key: Name
+  #         Value: DataSubnet1 
+  #       - Key: SubnetType
+  #         Value: Private
+  #     VpcId: !Ref MyVPC
   
   DataSubnet2:
     Type: AWS::EC2::Subnet
@@ -414,11 +414,11 @@ Resources:
           Value: Public
       VpcId: !Ref MyVPC
 
-  DataSubnetRouteTableAssociation1:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref NatRouteTable1
-      SubnetId: !Ref DataSubnet1
+  #DataSubnetRouteTableAssociation1:
+    # Type: AWS::EC2::SubnetRouteTableAssociation
+    # Properties:
+    #   RouteTableId: !Ref NatRouteTable1
+    #   SubnetId: !Ref DataSubnet1
   DataSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -560,40 +560,87 @@ Resources:
   #Note: its in Public, needs to be in provate
   
 
+  # WebServerInstance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     SubnetId: !Ref PublicSubnet1
+  #     IamInstanceProfile: !Ref WebServerInstanceProfile
+  #     ImageId: !Ref AmiID
+  #     InstanceType: t3.medium
+  #     KeyName:
+  #       Ref: KeyName
+  #     SecurityGroupIds:
+  #       - !Ref WebSecurityGroup
+  #     Tags:
+  #       - Key: Name
+  #         Value:  webserverInstancePhp
+      
+  #     UserData:
+  #       Fn::Base64: 
+  #         #!/bin/bash
+  #         yum install httpd php php-mysql -y
+  #         amazon-linux-extras install -y php7.2
+  #         cd /var/www/html
+  #         wget https://wordpress.org/wordpress-5.4.1.tar.gz
+  #         tar -xzf wordpress-5.4.1.tar.gz
+  #         cp -r wordpress/* /var/www/html/
+  #         rm -rf wordpress
+  #         rm -rf wordpress-5.4.1.tar.gz
+  #         chmod -R 755 wp-content
+  #         chown -R apache:apache wp-content
+  #         service httpd start
+  #         chkconfig httpd on
+
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      SubnetId: !Ref PublicSubnet1
       IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
+      SubnetId: !Ref PublicSubnet1
       InstanceType: t3.medium
-      KeyName:
-        Ref: KeyName
       SecurityGroupIds:
         - !Ref WebSecurityGroup
       Tags:
         - Key: Name
-          Value:  webserverInstancePhp
-      
+          Value: webserverInstancePhp
       UserData:
-        Fn::Base64: 
+        Fn::Base64: |
           #!/bin/bash
-          yum install httpd php php-mysql -y
-          amazon-linux-extras install -y php7.2
-          cd /var/www/html
-          wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          tar -xzf wordpress-5.4.1.tar.gz
-          cp -r wordpress/* /var/www/html/
-          rm -rf wordpress
-          rm -rf wordpress-5.4.1.tar.gz
-          chmod -R 755 wp-content
-          chown -R apache:apache wp-content
-          service httpd start
-          chkconfig httpd on
+          yum update -y
+          yum install -y httpd php
+          systemctl start httpd
+          systemctl enable httpd
+          usermod -a -G apache ec2-user
+          chown -R ec2-user:apache /var/www
+          chmod 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
 
-          
+          # PHP script to display Instance ID and Availability Zone
+          cat << 'EOF' > /var/www/html/index.php
+            <!DOCTYPE html>
+            <html>
+            <body>
+              <center>
 
-  #-------------------IAM---------------------------------------
+                <?php
+                # Get the instance ID from meta-data and store it in the $instance_id variable
+                $url = "http://169.254.169.254/latest/meta-data/instance-id";
+                $instance_id = file_get_contents($url);
+                # Get the instance's availability zone from metadata and store it in the $zone variable
+                $url = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
+                $zone = file_get_contents($url);
+                ?>
+
+                <h2>EC2 Instance ID: <?php echo $instance_id ?></h2>
+                <h2>Availability Zone: <?php echo $zone ?></h2>
+
+              </center>
+            </body>
+            </html>
+          EOF      
+
+#-------------------IAM---------------------------------------
   SSMIAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -685,25 +732,25 @@ Resources:
       
     Type: "AWS::RDS::DBParameterGroup"
   
-  DatabaseInstance1:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet1
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance1
+  # DatabaseInstance1:
+  #   Type: AWS::RDS::DBInstance
+  #   DeletionPolicy: Delete
+  #   Properties:
+  #     AllowMajorVersionUpgrade: false
+  #     AvailabilityZone: 
+  #       Fn::GetAtt:
+  #         - DataSubnet1
+  #         - AvailabilityZone
+  #     AutoMinorVersionUpgrade: true
+  #     DBClusterIdentifier: !Ref RDSCluster
+  #     DBInstanceClass: !Ref DatabaseInstanceType
+  #     DBParameterGroupName: 
+  #       Ref: RDSDBParameterGroup
+  #     DBSubnetGroupName: !Ref DataSubnetGroup
+  #     Engine: aurora-mysql
+  #     Tags:
+  #       - Key: Name
+  #         Value: DatabaseInstance1
   
   DatabaseInstance2:
     Type: AWS::RDS::DBInstance
@@ -769,7 +816,7 @@ Resources:
     Properties:
       DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
       SubnetIds:
-        - !Ref DataSubnet1
+        #- !Ref DataSubnet1
         - !Ref DataSubnet2
         - !Ref DataSubnet3
         - !Ref DataSubnet4
