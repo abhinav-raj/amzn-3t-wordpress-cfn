@@ -113,8 +113,7 @@ Resources:
       - Key: Name
         Value: "Public Subnet 1"
       - Key: subnet-type
-        Value: Public
-  
+        Value: Public  
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -134,7 +133,7 @@ Resources:
       VpcId:
         Ref: MyVPC
       CidrBlock: 10.0.4.0/24
-      AvailabilityZone: "us-east-1c"
+      AvailabilityZone: "us-east-1e"
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
@@ -142,20 +141,6 @@ Resources:
       - Key: subnet-type
         Value: Public
   
-  PublicSubnet4:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: MyVPC
-      CidrBlock: 10.0.5.0/24
-      AvailabilityZone: "us-east-1e"
-      MapPublicIpOnLaunch: true
-      Tags:
-      - Key: Name
-        Value: "Public Subnet 4"
-      - Key: subnet-type
-        Value: Public
-
   WebSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -167,8 +152,7 @@ Resources:
       - Key: Name
         Value: "Web Subnet 1"
       - Key: subnet-type
-        Value: Private
-      
+        Value: Private  
   WebSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -181,19 +165,19 @@ Resources:
         Value: "Web Subnet 2"
       - Key: subnet-type
         Value: Private
-  # DataSubnet1:
-  #   Type: AWS::EC2::Subnet
-  #   Properties:
-  #     AvailabilityZone: "us-east-1a"
-  #     CidrBlock: 10.0.101.0/24
-  #     MapPublicIpOnLaunch: false
-  #     Tags:
-  #       - Key: Name
-  #         Value: DataSubnet1 
-  #       - Key: SubnetType
-  #         Value: Private
-  #     VpcId: !Ref MyVPC
   
+  DataSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: "us-east-1a"
+      CidrBlock: 10.0.101.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: DataSubnet1 
+        - Key: SubnetType
+          Value: Private
+      VpcId: !Ref MyVPC
   DataSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -206,11 +190,10 @@ Resources:
         - Key: SubnetTypes
           Value: Private
       VpcId: !Ref MyVPC
-    
   DataSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: "us-east-1c"
+      AvailabilityZone: "us-east-1e"
       CidrBlock: 10.0.103.0/24
       MapPublicIpOnLaunch: false
       Tags:
@@ -220,18 +203,7 @@ Resources:
           Value: Private
       VpcId: !Ref MyVPC
   
-  DataSubnet4:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: "us-east-1e"
-      CidrBlock: 10.0.104.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: DataSubnet4
-        - Key: SubnetTypes
-          Value: Private
-      VpcId: !Ref MyVPC
+  
 #----------------------------RouteTable and associate------------------------------------------
   #publicEIP
   WebServerEIP:
@@ -381,44 +353,12 @@ Resources:
         - Key: Network
           Value: Public
       VpcId: !Ref MyVPC
-
-  NatEIP4:
-    Type: AWS::EC2::EIP
+ 
+  DataSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      Domain: vpc
-      Tags: 
-        - Key: Name
-          Value: NATElasticIP4
-  NatGateway4:
-    Type: AWS::EC2::NatGateway
-    DependsOn: VPCGW
-    Properties:
-      AllocationId: !GetAtt NatEIP4.AllocationId
-      SubnetId: !Ref PublicSubnet4
-      Tags:
-      - Key: Name
-        Value: NatGateway4
-  NatRoute4:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref NatRouteTable4
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway4
-  NatRouteTable4:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Join [ '', [ 'NatRouteTable4 / ', !Ref 'AWS::StackName' ] ]
-        - Key: Network
-          Value: Public
-      VpcId: !Ref MyVPC
-
-  #DataSubnetRouteTableAssociation1:
-    # Type: AWS::EC2::SubnetRouteTableAssociation
-    # Properties:
-    #   RouteTableId: !Ref NatRouteTable1
-    #   SubnetId: !Ref DataSubnet1
+      RouteTableId: !Ref NatRouteTable1
+      SubnetId: !Ref DataSubnet1
   DataSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -429,11 +369,7 @@ Resources:
     Properties:
       RouteTableId: !Ref NatRouteTable3
       SubnetId: !Ref DataSubnet3
-  DataSubnetRouteTableAssociation4:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref NatRouteTable4
-      SubnetId: !Ref DataSubnet4
+  
 ###-------------IgW and binding-------------------------------------------------------------###
   #InternetGateway IgW defined
   VPCIGW:
@@ -558,7 +494,6 @@ Resources:
           Value: bastionHost
   
   #Note: its in Public, needs to be in provate
-  
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -574,7 +509,7 @@ Resources:
         - Key: Name
           Value: webserverInstancePhp
       UserData:
-        Fn::Base64: |
+        Fn::Base64: !Sub  |
           #!/bin/bash
           yum install httpd php php-mysql -y
           amazon-linux-extras install -y php7.2
@@ -588,14 +523,99 @@ Resources:
           chown -R apache:apache wp-content
           service httpd start
           chkconfig httpd on
+          
+          #wp-config.php
+          cat << 'EOF' > /var/www/html/wp-config.php
+            <?php
+            /**
+              * The base configuration for WordPress
+              *
+              * The wp-config.php creation script uses this file during the
+              * installation. You don't have to use the web site, you can
+              * copy this file to "wp-config.php" and fill in the values.
+              *
+              * This file contains the following configurations:
+              *
+              * * MySQL settings
+              * * Secret keys
+              * * Database table prefix
+              * * ABSPATH
+              *
+              * @link https://wordpress.org/support/article/editing-wp-config-php/
+              *
+              * @package WordPress
+              */
 
-          # wp-config.php
-          sudo su
-          cp wp-config-sample.php  wp-config.php
-          sed -i "s/'database_name_here'/' ${DatabaseName} '/g" wp-config.php
-          sed -i "s/'username_here'/' ${DatabaseMasterUsername} '/g" wp-config.php
-          sed -i "s/'password_here'/' ${DatabaseMasterPassword} '/g" wp-config.php
-          sed -i "s/'localhost'/' ${DBEndPoint} '/g" wp-config.php
+            // ** MySQL settings - You can get this info from your web host ** //
+            /** The name of the database for WordPress */
+            define( 'DB_NAME', '${DatabaseName}' );
+            /** MySQL database username */
+            define( 'DB_USER', '${DatabaseMasterUsername}' );
+            /** MySQL database password */
+            define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
+           /** MySQL hostname */
+            define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
+           /** Database Charset to use in creating database tables. */
+            define( 'DB_CHARSET', 'utf8mb4' );
+           /** The Database Collate type. Don't change this if in doubt. */
+            define( 'DB_COLLATE', '' );
+           /**#@+
+              * Authentication Unique Keys and Salts.
+              *
+              * Change these to different unique phrases!
+              * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
+              * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
+              *
+              * @since 2.6.0
+              */
+            define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
+            define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
+            define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
+            define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
+            define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
+            define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
+            define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
+            define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
+
+            /**#@-*/
+
+            /**
+            * WordPress Database Table prefix.
+            *
+            * You can have multiple installations in one database if you give each
+            * a unique prefix. Only numbers, letters, and underscores please!
+            */
+            $table_prefix = 'wp_';
+
+            /**
+              * For developers: WordPress debugging mode.
+              *
+              * Change this to true to enable the display of notices during development.
+              * It is strongly recommended that plugin and theme developers use WP_DEBUG
+              * in their development environments.
+              *
+              * For information on other constants that can be used for debugging,
+              * visit the documentation.
+              *
+              * @link https://wordpress.org/support/article/debugging-in-wordpress/
+              */
+            define( 'WP_DEBUG', false );
+
+            /* That's all, stop editing! Happy publishing. */
+
+            /** Absolute path to the WordPress directory. */
+            if ( ! defined( 'ABSPATH' ) ) {
+              define( 'ABSPATH', __DIR__ . '/' );
+            }
+
+            /** Sets up WordPress vars and included files. */
+            require_once ABSPATH . 'wp-settings.php';
+
+          
+           
+    DependsOn: RDSCluster
+
+
 
 #-------------------IAM---------------------------------------
   SSMIAMRole:
@@ -689,25 +709,25 @@ Resources:
       
     Type: "AWS::RDS::DBParameterGroup"
   
-  # DatabaseInstance1:
-  #   Type: AWS::RDS::DBInstance
-  #   DeletionPolicy: Delete
-  #   Properties:
-  #     AllowMajorVersionUpgrade: false
-  #     AvailabilityZone: 
-  #       Fn::GetAtt:
-  #         - DataSubnet1
-  #         - AvailabilityZone
-  #     AutoMinorVersionUpgrade: true
-  #     DBClusterIdentifier: !Ref RDSCluster
-  #     DBInstanceClass: !Ref DatabaseInstanceType
-  #     DBParameterGroupName: 
-  #       Ref: RDSDBParameterGroup
-  #     DBSubnetGroupName: !Ref DataSubnetGroup
-  #     Engine: aurora-mysql
-  #     Tags:
-  #       - Key: Name
-  #         Value: DatabaseInstance1
+  DatabaseInstance1:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet1
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance1
   
   DatabaseInstance2:
     Type: AWS::RDS::DBInstance
@@ -747,36 +767,16 @@ Resources:
       Tags:
         - Key: Name
           Value: DatabaseInstance3
-  DatabaseInstance4:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet4
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance4
-
-
+  
   DataSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
       SubnetIds:
-        #- !Ref DataSubnet1
+        - !Ref DataSubnet1
         - !Ref DataSubnet2
         - !Ref DataSubnet3
-        - !Ref DataSubnet4
+        #- !Ref DataSubnet4
       Tags:
         - Key: Name
           Value: DataSubnetGroup
@@ -1173,3 +1173,157 @@ Outputs:
       #       - !GetAtt 
       #         - DatabaseSecurityGroup
       #         - GroupId
+
+
+
+
+      # Metadata:
+      # 'AWS::CloudFormation::Init':
+      #   config:
+      #     packages:
+      #       yum:
+      #         httpd: []
+      #         php: []
+      #   configSets:
+      #     wordpress_install:
+      #       - install_cfn
+      #       - install_wordpress
+      #   install_cfn:
+      #     files:
+      #       /etc/cfn/cfn-hup.conf:
+      #         content: !Join 
+      #           - ''
+      #           - - |
+      #               [main]
+      #             - stack=
+      #             - !Ref 'AWS::StackId'
+      #             - |+
+
+      #             - region=
+      #             - !Ref 'AWS::Region'
+      #             - |+
+
+      #         mode: '000400'
+      #         owner: root
+      #         group: root
+      #       /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+      #         content: !Join 
+      #           - ''
+      #           - - |
+      #               [cfn-auto-reloader-hook]
+      #             - |
+      #               triggers=post.update
+      #             - |
+      #               path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init
+      #             - 'action=/opt/aws/bin/cfn-init -v '
+      #             - '         --stack '
+      #             - !Ref 'AWS::StackName'
+      #             - '         --resource WebServerInstance '
+      #             - '         --configsets wordpress_install '
+      #             - '         --region '
+      #             - !Ref 'AWS::Region'
+      #             - |+
+
+      #         mode: '000400'
+      #         owner: root
+      #         group: root
+      #     services:
+      #       sysvinit:
+      #         cfn-hup:
+      #           enabled: 'true'
+      #           ensureRunning: 'true'
+      #           files:
+      #             - /etc/cfn/cfn-hup.conf
+      #             - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+      #   install_wordpress:
+      #     packages:
+      #       yum:
+      #         php: []
+      #         php-mysql: []
+      #         mysql: []
+      #         mysql-server: []
+      #         mysql-devel: []
+      #         mysql-libs: []
+      #         httpd: []
+      #     sources:
+      #       /var/www/html: 'http://wordpress.org/latest.tar.gz'
+      #     files:
+      #       # /tmp/setup.mysql:
+      #       #   content: !Join 
+      #       #     - ''
+      #       #     - - 'CREATE DATABASE '
+      #       #       - !Ref DBName
+      #       #       - |
+      #       #         ;
+      #       #       - CREATE USER '
+      #       #       - !Ref DBUser
+      #       #       - '''@''localhost'' IDENTIFIED BY '''
+      #       #       - !Ref DBPassword
+      #       #       - |
+      #       #         ';
+      #       #       - 'GRANT ALL ON '
+      #       #       - !Ref DBName
+      #       #       - .* TO '
+      #       #       - !Ref DBUser
+      #       #       - |
+      #       #         '@'localhost';
+      #       #       - |
+      #       #         FLUSH PRIVILEGES;
+      #       #   mode: '000400'
+      #       #   owner: root
+      #       #   group: root
+      #       /tmp/create-wp-config:
+      #         content: !Join 
+      #           - ''
+      #           - - |
+      #               #!/bin/bash -xe
+      #             - >
+      #               cp /var/www/html/wp-config-sample.php
+      #               /var/www/html/wp-config.php
+      #             - sed -i "s/'database_name_here'/'
+      #             - !Ref DatabaseName
+      #             - |
+      #               '/g" wp-config.php
+      #             - sed -i "s/'username_here'/'
+      #             - !Ref DatabaseMasterUsername
+      #             - |
+      #               '/g" wp-config.php
+      #             - sed -i "s/'password_here'/'
+      #             - !Ref DatabaseMasterPassword
+      #             - |
+      #               '/g" wp-config.php
+      #             - sed -i "s/'localhost'/'
+      #             - !GetAtt RDSCluster.Endpoint.Address
+      #             - |
+      #               '/g" wp-config.php
+      #         mode: '000500'
+      #         owner: root
+      #         group: root
+      #     services:
+      #       sysvinit:
+      #         httpd:
+      #           enabled: 'true'
+      #           ensureRunning: 'true'
+      #         mysqld:
+      #           enabled: 'true'
+      #           ensureRunning: 'true'
+
+    #   DatabaseInstance4:
+    # Type: AWS::RDS::DBInstance
+    # DeletionPolicy: Delete
+    # Properties:
+    #   AllowMajorVersionUpgrade: false
+    #   AvailabilityZone: 
+    #     Fn::GetAtt:
+    #       - DataSubnet4
+    #       - AvailabilityZone
+    #   AutoMinorVersionUpgrade: true
+    #   DBClusterIdentifier: !Ref RDSCluster
+    #   DBInstanceClass: !Ref DatabaseInstanceType
+    #   DBParameterGroupName: 
+    #     Ref: RDSDBParameterGroup
+    #   DBSubnetGroupName: !Ref DataSubnetGroup
+    #   Engine: aurora-mysql
+    #   Tags:
+    #     - Key: Name
+    #       Value: DatabaseInstance4
