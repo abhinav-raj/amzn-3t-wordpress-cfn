@@ -23,26 +23,33 @@ Parameters:
     Default: True
     Description: Indicates whether the DB instances in the cluster are encrypted.
     Type: String
-  DatabaseCmk:
-    Description: AWS KMS Customer Master Key (CMK) to encrypt database cluster
-    Type: String
+      # DatabaseCmk:
+      #   Description: AWS KMS Customer Master Key (CMK) to encrypt database cluster
+      #   Type: String
+  # 
+    # MultiAZDatabase:
+    #   Default: 'false'
+    #   Description: Create a Multi-AZ MySQL Amazon RDS database instance
+    #   Type: String
+    #   AllowedValues:
+    #     - 'true'
+    #     - 'false'
+    #   ConstraintDescription: must be either true or false.
+    # DBAllocatedStorage:
+    #   Default: '5'
+    #   Description: The size of the database (Gb)
+    #   Type: Number
+    #   MinValue: '5'
+    #   MaxValue: '1024'
+    #   ConstraintDescription: must be between 5 and 1024Gb.
+    # Subnets:
+    #   Type: 'List<AWS::EC2::Subnet::Id>'
+    #   Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
+    #   ConstraintDescription: >-
+    #     must be a list of at least two existing subnets associated with at least
+    #     two different availability zones. They should be residing in the selected
+    #     Virtual Private Cloud.
   
-  # MultiAZDatabase:
-  #   Default: 'false'
-  #   Description: Create a Multi-AZ MySQL Amazon RDS database instance
-  #   Type: String
-  #   AllowedValues:
-  #     - 'true'
-  #     - 'false'
-  #   ConstraintDescription: must be either true or false.
-  # DBAllocatedStorage:
-  #   Default: '5'
-  #   Description: The size of the database (Gb)
-  #   Type: Number
-  #   MinValue: '5'
-  #   MaxValue: '1024'
-  #   ConstraintDescription: must be between 5 and 1024Gb.
-
   DatabaseInstanceType:
     AllowedValues:
       - db.t2.small
@@ -88,18 +95,54 @@ Parameters:
 
 ########################################################################################################    
 Resources:
+####VPC##########
   MyVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      #EnableDnsSupport: 'false'
-      #EnableDnsHostnames: 'false'
       InstanceTenancy: default
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
           Value: GovClientVPC
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt VpcFlowLogsRole.Arn
+      LogGroupName: !Join [ '', [ !Ref 'AWS::StackName', '-FlowLog' ] ]
+      ResourceId: !Ref MyVPC
+      ResourceType: VPC
+      TrafficType: ALL
+  VpcFlowLogsLogGroup:
+    Type: AWS::Logs::LogGroup
+  VpcFlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - vpc-flow-logs.amazonaws.com
+      Path: '/'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+
 #-----------------------Subnet Block-----------------------------   
   PublicSubnet1:
     Type: AWS::EC2::Subnet
@@ -107,21 +150,26 @@ Resources:
       VpcId:
         Ref: MyVPC
       CidrBlock: 10.0.0.0/24
-      AvailabilityZone: "us-east-1a"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
         Value: "Public Subnet 1"
       - Key: subnet-type
-        Value: Public
-  
+        Value: Public  
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         Ref: MyVPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: "us-east-1b"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 2
+          - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
@@ -133,8 +181,11 @@ Resources:
     Properties:
       VpcId:
         Ref: MyVPC
-      CidrBlock: 10.0.4.0/24
-      AvailabilityZone: "us-east-1c"
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: 
+        Fn::Select: 
+          - 3
+          - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
@@ -142,62 +193,59 @@ Resources:
       - Key: subnet-type
         Value: Public
   
-  PublicSubnet4:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: MyVPC
-      CidrBlock: 10.0.5.0/24
-      AvailabilityZone: "us-east-1e"
-      MapPublicIpOnLaunch: true
-      Tags:
-      - Key: Name
-        Value: "Public Subnet 4"
-      - Key: subnet-type
-        Value: Public
-
   WebSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         Ref: MyVPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: "us-east-1a"
+      CidrBlock: 10.0.21.0/24
+      AvailabilityZone: !GetAtt [ "PublicSubnet1", "AvailabilityZone" ]
       Tags:
       - Key: Name
         Value: "Web Subnet 1"
       - Key: subnet-type
-        Value: Private
-      
+        Value: Private  
   WebSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         Ref: MyVPC
-      CidrBlock: 10.0.3.0/24
-      AvailabilityZone: "us-east-1b"
+      CidrBlock: 10.0.22.0/24
+      AvailabilityZone: !GetAtt [ "PublicSubnet2", "AvailabilityZone" ]
       Tags:
       - Key: Name
         Value: "Web Subnet 2"
       - Key: subnet-type
         Value: Private
-  # DataSubnet1:
-  #   Type: AWS::EC2::Subnet
-  #   Properties:
-  #     AvailabilityZone: "us-east-1a"
-  #     CidrBlock: 10.0.101.0/24
-  #     MapPublicIpOnLaunch: false
-  #     Tags:
-  #       - Key: Name
-  #         Value: DataSubnet1 
-  #       - Key: SubnetType
-  #         Value: Private
-  #     VpcId: !Ref MyVPC
-  
+  WebSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: MyVPC
+      CidrBlock: 10.0.23.0/24
+      AvailabilityZone: !GetAtt [ "PublicSubnet3", "AvailabilityZone" ]
+      Tags:
+      - Key: Name
+        Value: "Web Subnet 3"
+      - Key: subnet-type
+        Value: Private
+
+  DataSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !GetAtt [ "PublicSubnet1", "AvailabilityZone" ]
+      CidrBlock: 10.0.101.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: DataSubnet1 
+        - Key: SubnetType
+          Value: Private
+      VpcId: !Ref MyVPC
   DataSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: "us-east-1b"
+      AvailabilityZone: !GetAtt [ "PublicSubnet2", "AvailabilityZone" ]
       CidrBlock: 10.0.102.0/24
       MapPublicIpOnLaunch: false
       Tags:
@@ -206,11 +254,10 @@ Resources:
         - Key: SubnetTypes
           Value: Private
       VpcId: !Ref MyVPC
-    
   DataSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: "us-east-1c"
+      AvailabilityZone: !GetAtt [ "PublicSubnet3", "AvailabilityZone" ]
       CidrBlock: 10.0.103.0/24
       MapPublicIpOnLaunch: false
       Tags:
@@ -220,18 +267,7 @@ Resources:
           Value: Private
       VpcId: !Ref MyVPC
   
-  DataSubnet4:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: "us-east-1e"
-      CidrBlock: 10.0.104.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: DataSubnet4
-        - Key: SubnetTypes
-          Value: Private
-      VpcId: !Ref MyVPC
+  
 #----------------------------RouteTable and associate------------------------------------------
   #publicEIP
   WebServerEIP:
@@ -240,6 +276,15 @@ Resources:
       Domain: vpc
       InstanceId: !Ref WebServerInstance
   #Public
+  PublicSubnetDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicSubnetRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VPCIGW
+    DependsOn:
+      - VPCGW
+
   PublicSubnetRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -262,14 +307,13 @@ Resources:
         Ref: PublicSubnetRouteTable
       SubnetId:
         Ref: PublicSubnet2
-  PublicSubnetDefaultRoute:
-    Type: AWS::EC2::Route
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref PublicSubnetRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref VPCIGW
-    DependsOn:
-      - VPCGW
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+      SubnetId:
+        Ref: PublicSubnet3
   
   
   #PrivateRT
@@ -381,44 +425,28 @@ Resources:
         - Key: Network
           Value: Public
       VpcId: !Ref MyVPC
+ 
+  WebSubnetRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable1
+      SubnetId: !Ref WebSubnet1
+  WebSubnetRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable2
+      SubnetId: !Ref WebSubnet2
+  WebSubnetRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref NatRouteTable3
+      SubnetId: !Ref WebSubnet3
 
-  NatEIP4:
-    Type: AWS::EC2::EIP
+  DataSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      Domain: vpc
-      Tags: 
-        - Key: Name
-          Value: NATElasticIP4
-  NatGateway4:
-    Type: AWS::EC2::NatGateway
-    DependsOn: VPCGW
-    Properties:
-      AllocationId: !GetAtt NatEIP4.AllocationId
-      SubnetId: !Ref PublicSubnet4
-      Tags:
-      - Key: Name
-        Value: NatGateway4
-  NatRoute4:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref NatRouteTable4
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway4
-  NatRouteTable4:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Join [ '', [ 'NatRouteTable4 / ', !Ref 'AWS::StackName' ] ]
-        - Key: Network
-          Value: Public
-      VpcId: !Ref MyVPC
-
-  #DataSubnetRouteTableAssociation1:
-    # Type: AWS::EC2::SubnetRouteTableAssociation
-    # Properties:
-    #   RouteTableId: !Ref NatRouteTable1
-    #   SubnetId: !Ref DataSubnet1
+      RouteTableId: !Ref NatRouteTable1
+      SubnetId: !Ref DataSubnet1
   DataSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -429,11 +457,7 @@ Resources:
     Properties:
       RouteTableId: !Ref NatRouteTable3
       SubnetId: !Ref DataSubnet3
-  DataSubnetRouteTableAssociation4:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref NatRouteTable4
-      SubnetId: !Ref DataSubnet4
+  
 ###-------------IgW and binding-------------------------------------------------------------###
   #InternetGateway IgW defined
   VPCIGW:
@@ -461,14 +485,10 @@ Resources:
         VpcId:
           Ref: MyVPC
         SecurityGroupIngress:
-        # - CidrIp: 0.0.0.0/0
-        #   FromPort: '80'
-        #   IpProtocol: tcp
-        #   ToPort: '80'
         - CidrIp: !Ref SSHLocation
-          FromPort: '22'
+          FromPort: 22
           IpProtocol: tcp
-          ToPort: '22'  
+          ToPort: 22  
         Tags:
         - Key: Name
           Value: BastionSecurityGroup
@@ -483,12 +503,12 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-          # CidrIpv6: String
-          # Description: String
-          # SourcePrefixListId: String
-          # SourceSecurityGroupId: String
-          # SourceSecurityGroupName: String
-          # SourceSecurityGroupOwnerId: String
+            # CidrIpv6: String
+            # Description: String
+            # SourcePrefixListId: String
+            # SourceSecurityGroupId: String
+            # SourceSecurityGroupName: String
+            # SourceSecurityGroupOwnerId: String
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
@@ -510,17 +530,24 @@ Resources:
           SourceSecurityGroupId: !Ref WebSecurityGroup
       VpcId:
         !Ref MyVPC
-
+      Tags:
+        - Key: Name
+          Value: DatabaseSG
   WebSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for web instances
+      GroupDescription: Enable HTTP access via port 80 locked down to the load balancer + SSH access
       SecurityGroupIngress: #Enable HTTP access via port 80'
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          #SourceSecurityGroupId:  !Ref PublicAlbSecurityGroup
-          CidrIp: 0.0.0.0/0
+          SourceSecurityGroupId:  !Ref PublicAlbSecurityGroup
+            # SourceSecurityGroupId: !Select 
+            #   - 0
+            #   - !GetAtt 
+            #     - PublicApplicationLoadBalancer
+            #     - SecurityGroups
+            #CidrIp: 0.0.0.0/0
         - IpProtocol: tcp     #Enable HTTPs access via port 443'
           FromPort: 443
           ToPort: 443
@@ -531,15 +558,18 @@ Resources:
           SourceSecurityGroupId: !Ref BastionSecurityGroup
         
         #Note- for Testing
-        - CidrIp: !Ref SSHLocation
-          FromPort: '22'
-          IpProtocol: tcp
-          ToPort: '22'  
+          # - CidrIp: !Ref SSHLocation
+          #   FromPort: 22
+          #   IpProtocol: tcp
+          #   ToPort: 22  
       VpcId:
         !Ref MyVPC 
       Tags:
         - Key: Name
           Value: WebSecurityGroup 
+
+
+  
 #-------------instances created from here ------------------------------    
   #EC2 bastian 
   BastianInstance:
@@ -557,15 +587,13 @@ Resources:
         - Key: Name
           Value: bastionHost
   
-  #Note: its in Public, needs to be in provate
-  
+  #Note: its in Public, needs to be in private subnet
   WebServerInstance:
     Type: AWS::EC2::Instance
-    
     Properties:
       #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
-      SubnetId: !Ref PublicSubnet1
+      #SubnetId: !Ref PublicSubnet1                        #change ME
       InstanceType: t3.medium
       KeyName:
         Ref: KeyName
@@ -573,75 +601,333 @@ Resources:
         - !Ref WebSecurityGroup
       Tags:
         - Key: Name
-          Value: webserverInstancePhp
+          Value: webserverInstanceWP
       UserData:
-        'Fn::Base64': 
-          'Fn::Join':
-            - ''
-            - - |
-                #!/bin/bash
-              - |  
-                yum install httpd php php-mysql -y
-              - |
-                amazon-linux-extras install -y php7.2
-              - |
-                cd /var/www/html
-              - |
-                curl -sL https://wordpress.org/latest.tar.gz | tar xfz -
-              - |
-                chown -R root:root wordpress
-              - sed -e 's/database_name_here/'
-              - 'Ref': DatabaseName
-              - /'
-              - ' -e ''s/username_here/' 
-              - 'Ref':  DatabaseMasterUsername
-              - /'
-              - ' -e ''s/password_here/'
-              - 'Ref': DatabaseMasterPassword
-              - /'
-              - ' -e ''s/localhost/'
-              - 'Fn::GetAtt':
-                  - RDSCluster
-                  - Endpoint.Address
-              - /'
-              - |2
-                < wordpress/wp-config-sample.php > wordpress/wp-config.php
-              - |
-                cp -R /var/www/html/wordpress/ /var/www/html/
-              - |
-                chmod -R 755 wp-content
-              - |
-                chown -R apache:apache wp-content
-              - |
-                service httpd start
-              - |
-                chkconfig httpd on
+        Fn::Base64: !Sub  |
+          #!/bin/bash
+          yum install httpd php php-mysql -y
+          amazon-linux-extras install -y php7.2
+          cd /var/www/html
+          wget https://wordpress.org/wordpress-5.4.1.tar.gz
+          tar -xzf wordpress-5.4.1.tar.gz
+          cp -r wordpress/* /var/www/html/
+          rm -rf wordpress
+          rm -rf wordpress-5.4.1.tar.gz
+          chmod -R 755 wp-content
+          chown -R apache:apache wp-content
+          service httpd start
+          chkconfig httpd on
+          
+          #wp-config.php
+          cat << 'EOF' > /var/www/html/wp-config.php
+            <?php
+            /**
+              * The base configuration for WordPress
+              *
+              * The wp-config.php creation script uses this file during the
+              * installation. You don't have to use the web site, you can
+              * copy this file to "wp-config.php" and fill in the values.
+              *
+              * This file contains the following configurations:
+              *
+              * * MySQL settings
+              * * Secret keys
+              * * Database table prefix
+              * * ABSPATH
+              *
+              * @link https://wordpress.org/support/article/editing-wp-config-php/
+              *
+              * @package WordPress
+              */
 
-              # wp-config.php
-              # - cat << 'EOF' > /var/www/html/wp-config.php
-              # -   <?php
-              # -   define( 'DB_NAME', '${DatabaseName}' );
-              # -   /** MySQL database username */
-              # -   define( 'DB_USER', 'wordpress' );
-              # -   /** MySQL database password */
-              # -   define( 'DB_PASSWORD', 'wordpress' );
-              # -   /** MySQL hostname */
-              # -   define( 'DB_HOST', '${DBEndPoint}' );
-              # -   /** Database Charset to use in creating database tables. */
-              # -   define( 'DB_CHARSET', 'utf8mb4' );
-              # -   /** The Database Collate type. Don't change this if in doubt. */
-              # -   define( 'DB_COLLATE', '' );
-              # -   $table_prefix = 'wp_';
-              # -   define( 'WP_DEBUG', false );
-              # -   if ( ! defined( 'ABSPATH' ) ) {
-              # -     define( 'ABSPATH', __DIR__ . '/' );
-              # -   }
-              # -   require_once ABSPATH . 'wp-settings.php';
-              # -   EOF
+            // ** MySQL settings - You can get this info from your web host ** //
+            /** The name of the database for WordPress */
+              define( 'DB_NAME', '${DatabaseName}' );
+            /** MySQL database username */
+              define( 'DB_USER', '${DatabaseMasterUsername}' );
+            /** MySQL database password */
+              define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
+            /** MySQL hostname */
+              define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
+            /** Database Charset to use in creating database tables. */
+              define( 'DB_CHARSET', 'utf8mb4' );
+            /** The Database Collate type. Don't change this if in doubt. */
+              define( 'DB_COLLATE', '' );
+            /**#@+
+              * Authentication Unique Keys and Salts.
+              *
+              * Change these to different unique phrases!
+              * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
+              * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
+              *
+              * @since 2.6.0
+              */
+            define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
+            define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
+            define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
+            define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
+            define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
+            define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
+            define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
+            define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
+
+            /**#@-*/
+            /**
+              * WordPress Database Table prefix.
+              *
+              * You can have multiple installations in one database if you give each
+              * a unique prefix. Only numbers, letters, and underscores please!
+              */
+            $table_prefix = 'wp_';
+
+            /**
+              * For developers: WordPress debugging mode.
+              *
+              * Change this to true to enable the display of notices during development.
+              * It is strongly recommended that plugin and theme developers use WP_DEBUG
+              * in their development environments.
+              *
+              * For information on other constants that can be used for debugging,
+              * visit the documentation.
+              *
+              * @link https://wordpress.org/support/article/debugging-in-wordpress/
+              */
+            define( 'WP_DEBUG', false );
+
+            /* That's all, stop editing! Happy publishing. */
+            /** Absolute path to the WordPress directory. */
+            if ( ! defined( 'ABSPATH' ) ) {
+              define( 'ABSPATH', __DIR__ . '/' );
+            }
+            /** Sets up WordPress vars and included files. */
+            require_once ABSPATH . 'wp-settings.php';    
     DependsOn: RDSCluster
 
+#####------------AutoScaling, Launch Config, Scaling Plan------------######################
+      
+  
+  WebServerGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AutoScalingGroupName: AutoScaleGroup
+      
+      VPCZoneIdentifier:                                                  #A list of Availability Zones for the group
+        - !Ref WebSubnet1
+        - !Ref WebSubnet2
+        - !Ref WebSubnet3
+      #LaunchConfigurationName: !Ref LaunchConfig
+      InstanceId: !Ref WebServerInstance
+      DesiredCapacity: '3'                                                #desired capacity is the initial capacity of the Auto Scaling group at the time of its creation
+      MinSize: '1'
+      MaxSize: '5'
+      TargetGroupARNs:
+        - !Ref PublicAlbTargetGroup
+    
+  
+  # LaunchConfig:
+  #   Metadata:
+  #     'AWS::CloudFormation::Init':
+  #       configSets:
+  #         wordpress_install:
+  #           - install_cfn
+  #           - install_wordpress
+  #       install_cfn:
+  #         files:
+  #           /etc/cfn/cfn-hup.conf:
+  #             content: !Join 
+  #               - ''
+  #               - - |
+  #                   [main]
+  #                 - stack=
+  #                 - !Ref 'AWS::StackId'
+  #                 - |+
+
+  #                 - region=
+  #                 - !Ref 'AWS::Region'
+  #                 - |+
+
+  #             mode: '000400'
+  #             owner: root
+  #             group: root
+  #           /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+  #             content: !Join 
+  #               - ''
+  #               - - |
+  #                   [cfn-auto-reloader-hook]
+  #                 - |
+  #                   triggers=post.update
+  #                 - >
+  #                   path=Resources.LaunchConfig.Metadata.AWS::CloudFormation::Init
+  #                 - 'action=/opt/aws/bin/cfn-init -v '
+  #                 - '         --stack '
+  #                 - !Ref 'AWS::StackName'
+  #                 - '         --resource LaunchConfig '
+  #                 - '         --configsets wordpress_install '
+  #                 - '         --region '
+  #                 - !Ref 'AWS::Region'
+  #                 - |+
+
+  #             mode: '000400'
+  #             owner: root
+  #             group: root
+  #         services:
+  #           sysvinit:
+  #             cfn-hup:
+  #               enabled: 'true'
+  #               ensureRunning: 'true'
+  #               files:
+  #                 - /etc/cfn/cfn-hup.conf
+  #                 - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+  #       install_wordpress:
+  #         packages:
+  #           yum:
+  #             php70: []
+  #             php70-mysqlnd: []
+  #             mysql57: []
+  #             httpd24: []
+  #             #amazon-linux-extras: []
+  #         sources:
+  #           /var/www/html: 'http://wordpress.org/latest.tar.gz'
+  #         files:
+  #           /tmp/create-wp-config:
+  #             content: !Join 
+  #               - ''
+  #               - - |
+  #                   #!/bin/bash
+  #                 - >
+  #                   cp /var/www/html/wordpress/wp-config-sample.php
+  #                   /var/www/html/wordpress/wp-config.php
+  #                 - sed -i "s/'database_name_here'/'
+  #                 - !Ref DatabaseName
+  #                 - |
+  #                   '/g" wp-config.php
+  #                 - sed -i "s/'username_here'/'
+  #                 - !Ref DatabaseMasterUsername
+  #                 - |
+  #                   '/g" wp-config.php
+  #                 - sed -i "s/'password_here'/'
+  #                 - !Ref DatabaseMasterPassword
+  #                 - |
+  #                   '/g" wp-config.php
+  #                 - sed -i "s/'localhost'/'
+  #                 - !GetAtt 
+  #                   - RDSCluster
+  #                   - Endpoint.Address
+  #                 - |
+  #                   '/g" wp-config.php
+  #             mode: '000500'
+  #             owner: root
+  #             group: root
+  #         commands:
+  #           01_configure_wordpress:
+  #             command: /tmp/create-wp-config
+  #             cwd: /var/www/html/wordpress
+  #         services:
+  #           sysvinit:
+  #             httpd:
+  #               enabled: 'true'
+  #               ensureRunning: 'true'
+  #   Type: 'AWS::AutoScaling::LaunchConfiguration'      
+  #   Properties:
+  #     #IamInstanceProfile: !Ref WebServerInstanceProfile
+  #     ImageId: !Ref AmiID
+  #     #SubnetId: !Ref PublicSubnet1                        #change ME
+  #     InstanceType: t3.medium
+  #     KeyName:
+  #       Ref: KeyName
+  #     SecurityGroups:
+  #       - !Ref WebSecurityGroup
+  #     UserData: !Base64 
+  #       'Fn::Join':
+  #         - ''
+  #         - - |
+  #             #!/bin/bash -xe
+  #           - |
+  #             yum update -y aws-cfn-bootstrap
+  #           - |
+  #             amazon-linux-extras install -y php7.2
+  #           - '/opt/aws/bin/cfn-init -v '
+  #           - '         --stack '
+  #           - !Ref 'AWS::StackName'
+  #           - '         --resource LaunchConfig '
+  #           - '         --configsets wordpress_install '
+  #           - '         --region '
+  #           - !Ref 'AWS::Region'
+  #           - |+
+
+  #           - '/opt/aws/bin/cfn-signal -e $? '
+  #           - '         --stack '
+  #           - !Ref 'AWS::StackName'
+  #           - '         --resource WebServerGroup '
+  #           - '         --region '
+  #           - !Ref 'AWS::Region'
+  #           - |+    
+  #   DependsOn: RDSCluster
 
 
+
+      # Type: AWS::AutoScaling::LaunchConfiguration
+      # Properties: 
+      #   AssociatePublicIpAddress: Boolean
+      #   BlockDeviceMappings: 
+      #     - BlockDeviceMapping
+      #   ClassicLinkVPCId: String
+      #   ClassicLinkVPCSecurityGroups: 
+      #     - String
+      #   EbsOptimized: Boolean
+      #   IamInstanceProfile: String
+      #   ImageId: String
+      #   InstanceId: String
+      #   InstanceMonitoring: Boolean
+      #   InstanceType: String
+      #   KernelId: String
+      #   KeyName: String
+      #   LaunchConfigurationName: String
+      #   PlacementTenancy: String
+      #   RamDiskId: String
+      #   SecurityGroups: 
+      #     - String
+      #   SpotPrice: String
+      #   UserData: String
+
+
+      # Type: AWS::AutoScaling::AutoScalingGroup
+      # Properties: 
+      #   AutoScalingGroupName: String                    #The name of the Auto Scaling group. This name must be unique per Region per account.
+      #   AvailabilityZones:                              #You must specify one of the following properties: VPCZoneIdentifier or AvailabilityZones.
+      #     - String                                      #list of AZ, Required
+      #   Cooldown: String
+      #   DesiredCapacity: String                         #initial capacity of the Auto Scaling group at the time of its creation and the capacity it attempts to maintain. It can scale beyond this capacity if you configure automatic scaling.
+      #   HealthCheckGracePeriod: Integer                 #ELB health check dependent. amt of time, in seconds, that Amazon EC2 Auto Scaling waits before checking the health status of an EC2 instance that has come into service. Default =0
+      #   HealthCheckType: String                         # service to use for healthcheck, 
+      #   InstanceId: String                              #optional (if lc/ltemp not provided)  
+      #   LaunchConfigurationName: String
+      #   LaunchTemplate: 
+      #     LaunchTemplateSpecification
+      #   LifecycleHookSpecificationList: 
+      #     - LifecycleHookSpecification
+      #   LoadBalancerNames: 
+      #     - String
+      #   MaxInstanceLifetime: Integer
+      #   MaxSize: String
+      #   MetricsCollection: 
+      #     - MetricsCollection
+      #   MinSize: String
+      #   MixedInstancesPolicy: 
+      #     MixedInstancesPolicy
+      #   NewInstancesProtectedFromScaleIn: Boolean
+      #   NotificationConfigurations: 
+      #     - NotificationConfiguration
+      #   PlacementGroup: String
+      #   ServiceLinkedRoleARN: String
+      #   Tags: 
+      #     - TagProperty
+      #   TargetGroupARNs: 
+      #     - String
+      #   TerminationPolicies: 
+      #     - String
+      #   VPCZoneIdentifier: 
+      #     - String
 #-------------------IAM---------------------------------------
   SSMIAMRole:
     Type: AWS::IAM::Role
@@ -657,12 +943,12 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
-  WebServerInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref SSMIAMRole
+  # WebServerInstanceProfile:
+  #   Type: AWS::IAM::InstanceProfile
+  #   Properties:
+  #     Path: /
+  #     Roles:
+  #       - !Ref SSMIAMRole
 ####----------------LoadBalancer-------------------------------------------------------####
   PublicApplicationLoadBalancer: 
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -671,7 +957,9 @@ Resources:
       Subnets:
         - !Ref WebSubnet1
         - !Ref WebSubnet2
+        - !Ref WebSubnet3
       SecurityGroups:
+      # - !Ref WebSecurityGroup
       - !Ref PublicAlbSecurityGroup
       Tags:
       - Key: Name
@@ -682,8 +970,10 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: /wp-login.php
+      #HealthCheckPath: /wp-login.php
+      HealthCheckPath: /wordpress/wp-admin/install.php
       HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
       Name: 'ALB-TargetGroup'
       Port: 80                      #The port on which the targets receive traffic. This port is used unless you specify a port override when registering the target. 
       Protocol: HTTP                #he protocol to use for routing traffic to the targets. For Application Load Balancers, the supported protocols are HTTP and HTTPS.
@@ -692,8 +982,28 @@ Resources:
       Tags:
       - Key: Name
         Value: 'ALB-TargetGroup'
-      UnhealthyThresholdCount: 2    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
+      UnhealthyThresholdCount: 3    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
       VpcId: !Ref MyVPC
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: 'true'
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: '30'
+
+  
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref PublicAlbTargetGroup
+      LoadBalancerArn: !Ref PublicApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  
+
 ##################------------------DATABASE-----------------------------###############################
   
     
@@ -734,25 +1044,25 @@ Resources:
       
     Type: "AWS::RDS::DBParameterGroup"
   
-  # DatabaseInstance1:
-  #   Type: AWS::RDS::DBInstance
-  #   DeletionPolicy: Delete
-  #   Properties:
-  #     AllowMajorVersionUpgrade: false
-  #     AvailabilityZone: 
-  #       Fn::GetAtt:
-  #         - DataSubnet1
-  #         - AvailabilityZone
-  #     AutoMinorVersionUpgrade: true
-  #     DBClusterIdentifier: !Ref RDSCluster
-  #     DBInstanceClass: !Ref DatabaseInstanceType
-  #     DBParameterGroupName: 
-  #       Ref: RDSDBParameterGroup
-  #     DBSubnetGroupName: !Ref DataSubnetGroup
-  #     Engine: aurora-mysql
-  #     Tags:
-  #       - Key: Name
-  #         Value: DatabaseInstance1
+  DatabaseInstance1:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllowMajorVersionUpgrade: false
+      AvailabilityZone: 
+        Fn::GetAtt:
+          - DataSubnet1
+          - AvailabilityZone
+      AutoMinorVersionUpgrade: true
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref DatabaseInstanceType
+      DBParameterGroupName: 
+        Ref: RDSDBParameterGroup
+      DBSubnetGroupName: !Ref DataSubnetGroup
+      Engine: aurora-mysql
+      Tags:
+        - Key: Name
+          Value: DatabaseInstance1
   
   DatabaseInstance2:
     Type: AWS::RDS::DBInstance
@@ -792,36 +1102,16 @@ Resources:
       Tags:
         - Key: Name
           Value: DatabaseInstance3
-  DatabaseInstance4:
-    Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    Properties:
-      AllowMajorVersionUpgrade: false
-      AvailabilityZone: 
-        Fn::GetAtt:
-          - DataSubnet4
-          - AvailabilityZone
-      AutoMinorVersionUpgrade: true
-      DBClusterIdentifier: !Ref RDSCluster
-      DBInstanceClass: !Ref DatabaseInstanceType
-      DBParameterGroupName: 
-        Ref: RDSDBParameterGroup
-      DBSubnetGroupName: !Ref DataSubnetGroup
-      Engine: aurora-mysql
-      Tags:
-        - Key: Name
-          Value: DatabaseInstance4
-
-
+  
   DataSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: RDS Database Subnet Group for WordPress
       SubnetIds:
-        #- !Ref DataSubnet1
+        - !Ref DataSubnet1
         - !Ref DataSubnet2
         - !Ref DataSubnet3
-        - !Ref DataSubnet4
+        #- !Ref DataSubnet4
       Tags:
         - Key: Name
           Value: DataSubnetGroup
@@ -867,17 +1157,17 @@ Outputs:
   WebSecurityGroup:
     Value: !Ref WebSecurityGroup
   
-  WebServerPublicDNS:
-    Description: 'Public DNS of EC2 instance'
-    Value: !GetAtt WebServerInstance.PublicDnsName
+  # WebServerPublicDNS:
+  #   Description: 'Public DNS of EC2 instance'
+  #   Value: !GetAtt WebServerInstance.PublicDnsName
 
-  WebServerElasticIP:
-    Description: 'Elastic IP assigned to EC2'
-    Value: !Ref WebServerEIP
+  # WebServerElasticIP:
+  #   Description: 'Elastic IP assigned to EC2'
+  #   Value: !Ref WebServerEIP
 
-  WebsiteURL:
-    Value: !Sub http://${WebServerEIP}
-    Description: Application URL
+  # WebsiteURL:
+  #   Value: !Sub http://${WebServerEIP}
+  #   Description: Application URL
 
   DBEndPoint:
     Value: !GetAtt RDSCluster.Endpoint.Address
@@ -1352,3 +1642,23 @@ Outputs:
       #         mysqld:
       #           enabled: 'true'
       #           ensureRunning: 'true'
+
+    #   DatabaseInstance4:
+    # Type: AWS::RDS::DBInstance
+    # DeletionPolicy: Delete
+    # Properties:
+    #   AllowMajorVersionUpgrade: false
+    #   AvailabilityZone: 
+    #     Fn::GetAtt:
+    #       - DataSubnet4
+    #       - AvailabilityZone
+    #   AutoMinorVersionUpgrade: true
+    #   DBClusterIdentifier: !Ref RDSCluster
+    #   DBInstanceClass: !Ref DatabaseInstanceType
+    #   DBParameterGroupName: 
+    #     Ref: RDSDBParameterGroup
+    #   DBSubnetGroupName: !Ref DataSubnetGroup
+    #   Engine: aurora-mysql
+    #   Tags:
+    #     - Key: Name
+    #       Value: DatabaseInstance4

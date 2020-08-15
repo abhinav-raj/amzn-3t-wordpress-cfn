@@ -742,30 +742,9 @@ Resources:
         - !Ref WebSecurityGroup
       UserData:
         Fn::Base64: !Sub  |
-          # #!/bin/bash -x
-          # yum update -y
-          # yum install php php-mysql -y
-          # yum install httpd24 -y
-          # process php70-xml
-          # yum install php70
-          # amazon-linux-extras install -y php7.2
-          # cd /var/www/html
-          # yum install wget -y
-          # wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          # tar -xzf wordpress-5.4.1.tar.gz
-          # cp -r wordpress/* /var/www/html/
-          # rm -rf wordpress
-          # rm -rf wordpress-5.4.1.tar.gz
-          # chmod -R 755 wp-content
-          # chown -R apache:apache wp-content
-          # service httpd start
-          # chkconfig httpd on
 
           #!/bin/bash
           yum update -y
-          yum install -y httpd php
-          systemctl start httpd
-          systemctl enable httpd
           usermod -a -G apache ec2-user
           chown -R ec2-user:apache /var/www
           chmod 2775 /var/www
@@ -773,178 +752,107 @@ Resources:
           find /var/www -type f -exec chmod 0664 {} \;
 
           # PHP script to display Instance ID and Availability Zone
-          cat << 'EOF' > /var/www/html/index.php
-            <!DOCTYPE html>
-            <html>
-            <body>
-              <center>
-
-                <?php
-                # Get the instance ID from meta-data and store it in the $instance_id variable
-                $url = "http://169.254.169.254/latest/meta-data/instance-id";
-                $instance_id = file_get_contents($url);
-                # Get the instance's availability zone from metadata and store it in the $zone variable
-                $url = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
-                $zone = file_get_contents($url);
-                ?>
-
-                <h2>EC2 Instance ID: <?php echo $instance_id ?></h2>
-                <h2>Availability Zone: <?php echo $zone ?></h2>
-
-              </center>
-            </body>
-            </html>
-          EOF
+          yum install httpd24 -y
+          amazon-linux-extras install -y php7.2
+          cd /var/www/html
+          yum install wget -y
+          wget https://wordpress.org/wordpress-5.4.1.tar.gz
+          tar -xzf wordpress-5.4.1.tar.gz
+          cp -r wordpress/* /var/www/html/
+          rm -rf wordpress
+          rm -rf wordpress-5.4.1.tar.gz
+          chmod -R 755 wp-content
+          chown -R apache:apache wp-content
+          systemctl start httpd
+          systemctl enable httpd
           
-    #       #wp-config.php
-    #       cat << 'EOF' > /var/www/html/wp-config.php
-    #         <?php
-    #         /**
-    #           * The base configuration for WordPress
-    #           *
-    #           * The wp-config.php creation script uses this file during the
-    #           * installation. You don't have to use the web site, you can
-    #           * copy this file to "wp-config.php" and fill in the values.
-    #           *
-    #           * This file contains the following configurations:
-    #           *
-    #           * * MySQL settings
-    #           * * Secret keys
-    #           * * Database table prefix
-    #           * * ABSPATH
-    #           *
-    #           * @link https://wordpress.org/support/article/editing-wp-config-php/
-    #           *
-    #           * @package WordPress
-    #           */
+          
+          cat << 'EOF' > /var/www/html/wp-config.php
+          <?php
+          /**
+            * The base configuration for WordPress
+            *
+            * The wp-config.php creation script uses this file during the
+            * installation. You don't have to use the web site, you can
+            * copy this file to "wp-config.php" and fill in the values.
+            *
+            * This file contains the following configurations:
+            *
+            * * MySQL settings
+            * * Secret keys
+            * * Database table prefix
+            * * ABSPATH
+            *
+            * @link https://wordpress.org/support/article/editing-wp-config-php/
+            *
+            * @package WordPress
+            */
 
-    #         // ** MySQL settings - You can get this info from your web host ** //
-    #         /** The name of the database for WordPress */
-    #           define( 'DB_NAME', '${DatabaseName}' );
-    #         /** MySQL database username */
-    #           define( 'DB_USER', '${DatabaseMasterUsername}' );
-    #         /** MySQL database password */
-    #           define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
-    #         /** MySQL hostname */
-    #           define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
-    #         /** Database Charset to use in creating database tables. */
-    #           define( 'DB_CHARSET', 'utf8mb4' );
-    #         /** The Database Collate type. Don't change this if in doubt. */
-    #           define( 'DB_COLLATE', '' );
-    #         /**#@+
-    #           * Authentication Unique Keys and Salts.
-    #           *
-    #           * Change these to different unique phrases!
-    #           * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
-    #           * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
-    #           *
-    #           * @since 2.6.0
-    #           */
-    #         define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
-    #         define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
-    #         define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
-    #         define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
-    #         define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
-    #         define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
-    #         define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
-    #         define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
+            // ** MySQL settings - You can get this info from your web host ** //
+            /** The name of the database for WordPress */
+              define( 'DB_NAME', '${DatabaseName}' );
+            /** MySQL database username */
+              define( 'DB_USER', '${DatabaseMasterUsername}' );
+            /** MySQL database password */
+              define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
+            /** MySQL hostname */
+              define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
+            /** Database Charset to use in creating database tables. */
+              define( 'DB_CHARSET', 'utf8mb4' );
+            /** The Database Collate type. Don't change this if in doubt. */
+              define( 'DB_COLLATE', '' );
+            /**#@+
+              * Authentication Unique Keys and Salts.
+              *
+              * Change these to different unique phrases!
+              * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
+              * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
+              *
+              * @since 2.6.0
+              */
+            define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
+            define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
+            define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
+            define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
+            define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
+            define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
+            define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
+            define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
 
-    #         /**#@-*/
-    #         /**
-    #           * WordPress Database Table prefix.
-    #           *
-    #           * You can have multiple installations in one database if you give each
-    #           * a unique prefix. Only numbers, letters, and underscores please!
-    #           */
-    #         $table_prefix = 'wp_';
+            /**#@-*/
+            /**
+              * WordPress Database Table prefix.
+              *
+              * You can have multiple installations in one database if you give each
+              * a unique prefix. Only numbers, letters, and underscores please!
+              */
+            $table_prefix = 'wp_';
 
-    #         /**
-    #           * For developers: WordPress debugging mode.
-    #           *
-    #           * Change this to true to enable the display of notices during development.
-    #           * It is strongly recommended that plugin and theme developers use WP_DEBUG
-    #           * in their development environments.
-    #           *
-    #           * For information on other constants that can be used for debugging,
-    #           * visit the documentation.
-    #           *
-    #           * @link https://wordpress.org/support/article/debugging-in-wordpress/
-    #           */
-    #         define( 'WP_DEBUG', false );
+            /**
+              * For developers: WordPress debugging mode.
+              *
+              * Change this to true to enable the display of notices during development.
+              * It is strongly recommended that plugin and theme developers use WP_DEBUG
+              * in their development environments.
+              *
+              * For information on other constants that can be used for debugging,
+              * visit the documentation.
+              *
+              * @link https://wordpress.org/support/article/debugging-in-wordpress/
+              */
+            define( 'WP_DEBUG', false );
 
-    #         /* That's all, stop editing! Happy publishing. */
-    #         /** Absolute path to the WordPress directory. */
-    #         if ( ! defined( 'ABSPATH' ) ) {
-    #           define( 'ABSPATH', __DIR__ . '/' );
-    #         }
-    #         /** Sets up WordPress vars and included files. */
-    #         require_once ABSPATH . 'wp-settings.php';    
-    # DependsOn: RDSCluster
-
-
-
-      # Type: AWS::AutoScaling::LaunchConfiguration
-      # Properties: 
-      #   AssociatePublicIpAddress: Boolean
-      #   BlockDeviceMappings: 
-      #     - BlockDeviceMapping
-      #   ClassicLinkVPCId: String
-      #   ClassicLinkVPCSecurityGroups: 
-      #     - String
-      #   EbsOptimized: Boolean
-      #   IamInstanceProfile: String
-      #   ImageId: String
-      #   InstanceId: String
-      #   InstanceMonitoring: Boolean
-      #   InstanceType: String
-      #   KernelId: String
-      #   KeyName: String
-      #   LaunchConfigurationName: String
-      #   PlacementTenancy: String
-      #   RamDiskId: String
-      #   SecurityGroups: 
-      #     - String
-      #   SpotPrice: String
-      #   UserData: String
+            /* That's all, stop editing! Happy publishing. */
+            /** Absolute path to the WordPress directory. */
+            if ( ! defined( 'ABSPATH' ) ) {
+              define( 'ABSPATH', __DIR__ . '/' );
+            }
+            /** Sets up WordPress vars and included files. */
+            require_once ABSPATH . 'wp-settings.php';    
+    DependsOn: RDSCluster
 
 
-      # Type: AWS::AutoScaling::AutoScalingGroup
-      # Properties: 
-      #   AutoScalingGroupName: String                    #The name of the Auto Scaling group. This name must be unique per Region per account.
-      #   AvailabilityZones:                              #You must specify one of the following properties: VPCZoneIdentifier or AvailabilityZones.
-      #     - String                                      #list of AZ, Required
-      #   Cooldown: String
-      #   DesiredCapacity: String                         #initial capacity of the Auto Scaling group at the time of its creation and the capacity it attempts to maintain. It can scale beyond this capacity if you configure automatic scaling.
-      #   HealthCheckGracePeriod: Integer                 #ELB health check dependent. amt of time, in seconds, that Amazon EC2 Auto Scaling waits before checking the health status of an EC2 instance that has come into service. Default =0
-      #   HealthCheckType: String                         # service to use for healthcheck, 
-      #   InstanceId: String                              #optional (if lc/ltemp not provided)  
-      #   LaunchConfigurationName: String
-      #   LaunchTemplate: 
-      #     LaunchTemplateSpecification
-      #   LifecycleHookSpecificationList: 
-      #     - LifecycleHookSpecification
-      #   LoadBalancerNames: 
-      #     - String
-      #   MaxInstanceLifetime: Integer
-      #   MaxSize: String
-      #   MetricsCollection: 
-      #     - MetricsCollection
-      #   MinSize: String
-      #   MixedInstancesPolicy: 
-      #     MixedInstancesPolicy
-      #   NewInstancesProtectedFromScaleIn: Boolean
-      #   NotificationConfigurations: 
-      #     - NotificationConfiguration
-      #   PlacementGroup: String
-      #   ServiceLinkedRoleARN: String
-      #   Tags: 
-      #     - TagProperty
-      #   TargetGroupARNs: 
-      #     - String
-      #   TerminationPolicies: 
-      #     - String
-      #   VPCZoneIdentifier: 
-      #     - String
+      
 #-------------------IAM---------------------------------------
   SSMIAMRole:
     Type: AWS::IAM::Role
@@ -972,14 +880,12 @@ Resources:
     Properties:
       Scheme: internet-facing
       Subnets:
-        # - !Ref PublicSubnet1
-        # - !Ref PublicSubnet2
-        # - !Ref PublicSubnet3
-        - !Ref WebSubnet1
-        - !Ref WebSubnet2
-        - !Ref WebSubnet3
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+
       SecurityGroups:
-      - !Ref WebSecurityGroup                         #The IDs of the security groups for the load balancer.
+      - !Ref PublicAlbSecurityGroup                         #The IDs of the security groups for the load balancer.
       #- !Ref PublicAlbSecurityGroup
       Tags:
       - Key: Name
