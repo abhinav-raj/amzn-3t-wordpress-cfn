@@ -1,3 +1,35 @@
+#Problem and ProjectTracking
+  #The agency has decided to move forward with partnering with AWS. The first project is to migrate the National Park Weather Service from on-prem to AWS. The Weather Service is a wordpress site running on a Linux os. The weather service will be used mostly by east coast National Park visitors. The service must be highly available and able to respond to usage peaks and slowdowns. The administrators need a secure way to access the servers without exposing ssh to the world. The administrators are also looking to reduce their administrative overhead in regard to their database. They would like to limit or reduce the need to patch database servers. The administrators also need to be notified of any server failures.
+  # Done: 1. OS baseline image running Amazon Linux 2
+  # !Done: 2. Encrypt data at rest and in transit
+  # Done: 3. Minimum of 3 servers available at all time during normal business hours and 1 server during off hours
+  # Done: 4. An application load balancer for public accessibility to the application
+  # Done: 5. Real-time monitoring of host failures
+  # Done: 6. Access logs available for analysis for up to a month
+  # Done: 7. Would like the sample code to be written in CloudFormation
+
+  #  Done: Application - Wordpress (Amazon Linux 2 t3.medium)
+  #  Done: Backend - Aurora - MySQL
+  #  Done: Logging: CloudWatch (App logs go to CloudWatch)
+  #  Done: Notification - SNS Receive Notification for threshold involving load balancers Autoscaling
+
+  #EXTRACREDIT
+  # !Done: DevOps Pipeline, 
+  #  Done: ElastiCache
+
+
+  #ToDo
+  #  !Done: EFS
+  # !Done: 2. Encrypt data at rest and in transit
+  # !Done: DevOps Pipeline, 
+
+
+  ##---------------------------------------------------------------------------------------------------------------
+  #####ElastiCacheWorking Here
+  #LC in Autoscaling working here--> webserver lauching, apache insaliig and rds connecting. 
+  #Log- Autoscale SchdeuleWork checking Done
+  #Testing SNS for autoscaling
+
 Parameters:
   KeyName:
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
@@ -33,6 +65,14 @@ Parameters:
     Default: cache.t2.medium
     Description: The Amazon ElastiCache cluster node type.
     Type: String  
+  
+  OperatorEMail:
+    Description: EMail address to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: >-
+      ([a-zA-Z0-9_\-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)
+    ConstraintDescription: must be a valid email address.
+
   DatabaseEncrpytedBoolean:
     AllowedValues:
       - true
@@ -109,7 +149,6 @@ Parameters:
     Type: String
     Default: wordpress
 
-
 ########################################################################################################    
 Resources:
 ###-----------------VPC-------------------------###############  
@@ -117,24 +156,30 @@ Resources:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      #EnableDnsSupport: 'false'
-      #EnableDnsHostnames: 'false'
       InstanceTenancy: default
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
+      EnableDnsSupport: true                                        #instances launched in the VPC get DNS hostnames
+      EnableDnsHostnames: true                                      #whether the DNS resolution is supported
       Tags:
         - Key: Name
           Value: GovClientVPC
+  
+###-----------------Logging-------------------------###############  
   VpcFlowLog:
     Type: AWS::EC2::FlowLog
     Properties:
-      DeliverLogsPermissionArn: !GetAtt VpcFlowLogsRole.Arn
+      DeliverLogsPermissionArn: !GetAtt VpcFlowLogsRole.Arn                         #ARN for the IAM role that permits Amazon EC2 to publish flow logs to a CloudWatch Logs log group in your account.
+      # LogDestination: String                                                      #destination to which the flow log data is to be published. Can be cloudwatch or S3
       LogGroupName: !Join [ '', [ !Ref 'AWS::StackName', '-FlowLog' ] ]
       ResourceId: !Ref MyVPC
-      ResourceType: VPC
-      TrafficType: ALL
+      ResourceType: VPC                                                             #Allowed values: NetworkInterface | Subnet | VPC
+      TrafficType: ALL                                                              #Allowed values: ACCEPT | ALL | REJECT
+      #LogDestinationType                                                           # Allowed values: cloud-watch-logs | s3, if logDestination--s3, dont use me
+
   VpcFlowLogsLogGroup:
     Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 90
+  
   VpcFlowLogsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -175,10 +220,10 @@ Resources:
           - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
-      - Key: Name
-        Value: "Public Subnet 1"
-      - Key: subnet-type
-        Value: Public  
+        - Key: Name
+          Value: "Public Subnet 1"
+        - Key: subnet-type
+          Value: Public  
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -191,10 +236,10 @@ Resources:
           - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
-      - Key: Name
-        Value: "Public Subnet 2"
-      - Key: subnet-type
-        Value: Public
+        - Key: Name
+          Value: "Public Subnet 2"
+        - Key: subnet-type
+          Value: Public
   PublicSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
@@ -207,10 +252,10 @@ Resources:
           - Fn::GetAZs: ""
       MapPublicIpOnLaunch: true
       Tags:
-      - Key: Name
-        Value: "Public Subnet 3"
-      - Key: subnet-type
-        Value: Public
+        - Key: Name
+          Value: "Public Subnet 3"
+        - Key: subnet-type
+          Value: Public
   
   WebSubnet1:
     Type: AWS::EC2::Subnet
@@ -220,10 +265,10 @@ Resources:
       CidrBlock: 10.0.21.0/24
       AvailabilityZone: !GetAtt [ "PublicSubnet1", "AvailabilityZone" ]
       Tags:
-      - Key: Name
-        Value: "Web Subnet 1"
-      - Key: subnet-type
-        Value: Private  
+        - Key: Name
+          Value: "Web Subnet 1"
+        - Key: subnet-type
+          Value: Private  
   WebSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -232,10 +277,10 @@ Resources:
       CidrBlock: 10.0.22.0/24
       AvailabilityZone: !GetAtt [ "PublicSubnet2", "AvailabilityZone" ]
       Tags:
-      - Key: Name
-        Value: "Web Subnet 2"
-      - Key: subnet-type
-        Value: Private
+        - Key: Name
+          Value: "Web Subnet 2"
+        - Key: subnet-type
+          Value: Private
   WebSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
@@ -244,10 +289,10 @@ Resources:
       CidrBlock: 10.0.23.0/24
       AvailabilityZone: !GetAtt [ "PublicSubnet3", "AvailabilityZone" ]
       Tags:
-      - Key: Name
-        Value: "Web Subnet 3"
-      - Key: subnet-type
-        Value: Private
+        - Key: Name
+          Value: "Web Subnet 3"
+        - Key: subnet-type
+          Value: Private
 
   DataSubnet1:
     Type: AWS::EC2::Subnet
@@ -285,7 +330,6 @@ Resources:
         - Key: SubnetTypes
           Value: Private
       VpcId: !Ref MyVPC
-  
   
 #----------------------------RouteTable and associate------------------------------------------
   #publicEIP
@@ -356,8 +400,8 @@ Resources:
       SubnetId: #!Ref PublicSubnet1                  #The public subnet in which to create the NAT gateway
         Ref: PublicSubnet1
       Tags:
-      - Key: Name
-        Value: NatGateway1
+        - Key: Name
+          Value: NatGateway1
   NatRoute1:
     Type: AWS::EC2::Route
     Properties:
@@ -395,8 +439,8 @@ Resources:
       AllocationId: !GetAtt NatEIP2.AllocationId
       SubnetId: !Ref PublicSubnet2
       Tags:
-      - Key: Name
-        Value: NatGateway2
+        - Key: Name
+          Value: NatGateway2
   NatRoute2:
     Type: AWS::EC2::Route
     Properties:
@@ -427,8 +471,8 @@ Resources:
       AllocationId: !GetAtt NatEIP3.AllocationId
       SubnetId: !Ref PublicSubnet3
       Tags:
-      - Key: Name
-        Value: NatGateway3
+        - Key: Name
+          Value: NatGateway3
   NatRoute3:
     Type: AWS::EC2::Route
     Properties:
@@ -503,18 +547,19 @@ Resources:
         GroupDescription: Allow http to client host- security group for Bastion instances
         VpcId:
           Ref: MyVPC
+        GroupName: BastionSecurityGroup
         SecurityGroupIngress:
-        # - CidrIp: 0.0.0.0/0
-        #   FromPort: '80'
-        #   IpProtocol: tcp
-        #   ToPort: '80'
-        - CidrIp: !Ref SSHLocation
-          FromPort: 22
-          IpProtocol: tcp
-          ToPort: 22  
+          # - CidrIp: 0.0.0.0/0
+          #   FromPort: '80'
+          #   IpProtocol: tcp
+          #   ToPort: '80'
+          - CidrIp: !Ref SSHLocation
+            FromPort: 22
+            IpProtocol: tcp
+            ToPort: 22  
         Tags:
-        - Key: Name
-          Value: BastionSecurityGroup
+          - Key: Name
+            Value: BastionSecurityGroup
   
   PublicAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -522,20 +567,20 @@ Resources:
       GroupDescription: Security group for ALB
       GroupName: PublicAlb_SecurityGroup
       SecurityGroupIngress:             #The inbound rules associated with the security group
-        - IpProtocol: tcp               #HTTPS 
-          FromPort: 443
-          ToPort: 443
+        - IpProtocol: tcp               #HTTP, ipv4
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
+        # - IpProtocol: tcp               #HTTPS 
+          #   FromPort: 443
+          #   ToPort: 443
+          #   CidrIp: 0.0.0.0/0
           # CidrIpv6: String
           # Description: String
           # SourcePrefixListId: String
           # SourceSecurityGroupId: String
           # SourceSecurityGroupName: String
-          # SourceSecurityGroupOwnerId: String
-        - IpProtocol: tcp                       #HTTP, ipv4
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
+          # SourceSecurityGroupOwnerId: String  
       VpcId:
         !Ref MyVPC    
       Tags:
@@ -571,10 +616,10 @@ Resources:
           #     - PublicApplicationLoadBalancer
           #     - SecurityGroups
           #CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp     #Enable HTTPs access via port 443'
-          FromPort: 443
-          ToPort: 443
-          SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
+        # - IpProtocol: tcp     #Enable HTTPs access via port 443'
+          #   FromPort: 443
+          #   ToPort: 443
+          #   SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
         - IpProtocol: tcp     #SSH
           FromPort: 22
           ToPort: 22
@@ -593,7 +638,7 @@ Resources:
   ElastiCacheSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for ElastiCache cache cluster
+      GroupDescription: Security group for ElastiCache cluster
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 11211
@@ -602,16 +647,16 @@ Resources:
       VpcId:
         !Ref MyVPC
 
-  
 #-------------instances created from here ------------------------------    
   #EC2 bastian 
   BastianInstance:
     Type: AWS::EC2::Instance
     Properties:
       SubnetId: !Ref PublicSubnet1
-      ImageId: !Ref AmiID #alternate way to refer. 
+      ImageId: !Ref AmiID #alternate way to refer using SSM. 
       #ImageId: ami-02354e95b39ca8dec #Amazon Linux 2 AMI (HVM), SSD Volume Type64-bit Arm comes with five years support. It provides Linux kernel 4.14 tuned for optimal performance on Amazon EC2
       InstanceType: t3.medium
+
       KeyName:
         Ref: KeyName
       SecurityGroupIds:
@@ -620,143 +665,53 @@ Resources:
         - Key: Name
           Value: bastionHost
   
-  #Note: its in Public, needs to be in private subnet
-  # WebServerInstance:
-  #   Type: AWS::EC2::Instance
-  #   Properties:
-  #     #IamInstanceProfile: !Ref WebServerInstanceProfile
-  #     ImageId: !Ref AmiID
-  #     SubnetId: !Ref PublicSubnet1                        #change ME
-  #     InstanceType: t3.medium
-  #     KeyName:
-  #       Ref: KeyName
-  #     SecurityGroupIds:
-  #       - !Ref WebSecurityGroup
-  #     Tags:
-  #       - Key: Name
-  #         Value: webserverInstancePhp
-  #     UserData:
-  #       Fn::Base64: !Sub  |
-  #         #!/bin/bash
-  #         yum install httpd php php-mysql -y
-  #         amazon-linux-extras install -y php7.2
-  #         cd /var/www/html
-  #         wget https://wordpress.org/wordpress-5.4.1.tar.gz
-  #         tar -xzf wordpress-5.4.1.tar.gz
-  #         cp -r wordpress/* /var/www/html/
-  #         rm -rf wordpress
-  #         rm -rf wordpress-5.4.1.tar.gz
-  #         chmod -R 755 wp-content
-  #         chown -R apache:apache wp-content
-  #         service httpd start
-  #         chkconfig httpd on
-          
-  #         #wp-config.php
-  #         cat << 'EOF' > /var/www/html/wp-config.php
-  #           <?php
-  #           /**
-  #             * The base configuration for WordPress
-  #             *
-  #             * The wp-config.php creation script uses this file during the
-  #             * installation. You don't have to use the web site, you can
-  #             * copy this file to "wp-config.php" and fill in the values.
-  #             *
-  #             * This file contains the following configurations:
-  #             *
-  #             * * MySQL settings
-  #             * * Secret keys
-  #             * * Database table prefix
-  #             * * ABSPATH
-  #             *
-  #             * @link https://wordpress.org/support/article/editing-wp-config-php/
-  #             *
-  #             * @package WordPress
-  #             */
-
-  #           // ** MySQL settings - You can get this info from your web host ** //
-  #           /** The name of the database for WordPress */
-  #             define( 'DB_NAME', '${DatabaseName}' );
-  #           /** MySQL database username */
-  #             define( 'DB_USER', '${DatabaseMasterUsername}' );
-  #           /** MySQL database password */
-  #             define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
-  #           /** MySQL hostname */
-  #             define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
-  #           /** Database Charset to use in creating database tables. */
-  #             define( 'DB_CHARSET', 'utf8mb4' );
-  #           /** The Database Collate type. Don't change this if in doubt. */
-  #             define( 'DB_COLLATE', '' );
-  #           /**#@+
-  #             * Authentication Unique Keys and Salts.
-  #             *
-  #             * Change these to different unique phrases!
-  #             * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
-  #             * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
-  #             *
-  #             * @since 2.6.0
-  #             */
-  #           define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
-  #           define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
-  #           define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
-  #           define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
-  #           define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
-  #           define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
-  #           define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
-  #           define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
-
-  #           /**#@-*/
-  #           /**
-  #             * WordPress Database Table prefix.
-  #             *
-  #             * You can have multiple installations in one database if you give each
-  #             * a unique prefix. Only numbers, letters, and underscores please!
-  #             */
-  #           $table_prefix = 'wp_';
-
-  #           /**
-  #             * For developers: WordPress debugging mode.
-  #             *
-  #             * Change this to true to enable the display of notices during development.
-  #             * It is strongly recommended that plugin and theme developers use WP_DEBUG
-  #             * in their development environments.
-  #             *
-  #             * For information on other constants that can be used for debugging,
-  #             * visit the documentation.
-  #             *
-  #             * @link https://wordpress.org/support/article/debugging-in-wordpress/
-  #             */
-  #           define( 'WP_DEBUG', false );
-
-  #           /* That's all, stop editing! Happy publishing. */
-  #           /** Absolute path to the WordPress directory. */
-  #           if ( ! defined( 'ABSPATH' ) ) {
-  #             define( 'ABSPATH', __DIR__ . '/' );
-  #           }
-  #           /** Sets up WordPress vars and included files. */
-  #           require_once ABSPATH . 'wp-settings.php';    
-  #   DependsOn: RDSCluster
-
 #####------------AutoScaling, Launch Config, Scaling Plan------------######################
       
-  
+  NotificationTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - Endpoint: !Ref OperatorEMail
+          Protocol: email
+
   WebServerGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
+      AutoScalingGroupName: Mb3ASG
       VPCZoneIdentifier: 
-      # - !Ref PublicSubnet1
-      # - !Ref PublicSubnet2
-      # - !Ref PublicSubnet3
         - !Ref WebSubnet1
         - !Ref WebSubnet2
         - !Ref WebSubnet3
       LaunchConfigurationName: !Ref LaunchConfig
       MinSize: '1'
       MaxSize: '10'
+      MetricsCollection: 
+        - Granularity: "1Minute"
+          # Metrics:                                              #If dont specify, all metrics are enabled
+          #   - "GroupPendingInstances"
+          #   - "GroupTerminatingInstances"
       DesiredCapacity: '3'
+      NotificationConfigurations:
+        - TopicARN: !Ref NotificationTopic
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
       TargetGroupARNs:
         - !Ref PublicAlbTargetGroup
-
-  ScheduledActionOut: 
+    
+  # AutoScalingPolicy:
+  #   Type: AWS::AutoScaling::ScalingPolicy
+  #   Properties:
+  #     AdjustmentType: ChangeInCapacity
+  #     AutoScalingGroupName: !Ref WebServerGroup
+  #     Cooldown: '60'
+  #     PolicyType: SimpleScaling
+  #     ScalingAdjustment: 1
+  
+  #Scaling based on time
+  BusinessHourSchedule: 
     Type: AWS::AutoScaling::ScheduledAction
     Properties:
       AutoScalingGroupName: 
@@ -764,22 +719,69 @@ Resources:
       MaxSize: 10
       MinSize: 3
       Recurrence: "0 7 * * *"
-  ScheduledActionIn: 
+  OffHourSchedule: 
     Type: AWS::AutoScaling::ScheduledAction
     Properties:
       AutoScalingGroupName: 
         Ref: "WebServerGroup"
-      MaxSize: 1
+      MaxSize: 2
       MinSize: 1
       Recurrence: "0 19 * * *"
-    
-  
+
+  #Scaling based on CPU
+  WebServerScaleUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      Cooldown: '60'
+      ScalingAdjustment: 1
+  WebServerScaleDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerGroup
+      Cooldown: '60'
+      ScalingAdjustment: -1
+  CPUAlarmHigh:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale-up if CPU > 80% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 90
+      AlarmActions:
+        - !Ref WebServerScaleUpPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+      ComparisonOperator: GreaterThanThreshold
+  CPUAlarmLow:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale-down if CPU < 50% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 70
+      AlarmActions:
+        - !Ref WebServerScaleDownPolicy
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerGroup
+      ComparisonOperator: LessThanThreshold
+
+
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'      
     Properties:
       #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
-      #SubnetId: !Ref PublicSubnet1                        #change ME
       InstanceType: t3.medium
       KeyName:
         Ref: KeyName
@@ -895,9 +897,7 @@ Resources:
             /** Sets up WordPress vars and included files. */
             require_once ABSPATH . 'wp-settings.php';    
     DependsOn: RDSCluster
-
-
-      
+   
 #-------------------IAM---------------------------------------
   SSMIAMRole:
     Type: AWS::IAM::Role
@@ -931,7 +931,6 @@ Resources:
 
       SecurityGroups:
       - !Ref PublicAlbSecurityGroup                         #The IDs of the security groups for the load balancer.
-      #- !Ref PublicAlbSecurityGroup
       Tags:
       - Key: Name
         Value:  'Public ALB' 
@@ -953,15 +952,16 @@ Resources:
       #HealthCheckPath: /wp-login.php
       HealthCheckPath: /wp-admin/install.php
       HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
       Name: 'ALB-TargetGroup'
       Port: 80                      #The port on which the targets receive traffic. This port is used unless you specify a port override when registering the target. 
       Protocol: HTTP                #he protocol to use for routing traffic to the targets. For Application Load Balancers, the supported protocols are HTTP and HTTPS.
       #HealthCheckPort
       #HealthCheckProtocol
       Tags:
-      - Key: Name
-        Value: 'ALB-TargetGroup'
-      UnhealthyThresholdCount: 3    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
+        - Key: Name
+          Value: 'ALB-TargetGroup'
+      UnhealthyThresholdCount: 5    #The number of consecutive health check failures required before considering a target unhealthy. For target groups with a protocol of HTTP or HTTPS, the default is 2.
       VpcId: !Ref MyVPC
       TargetGroupAttributes:
         - Key: stickiness.enabled
@@ -970,10 +970,6 @@ Resources:
           Value: lb_cookie
         - Key: stickiness.lb_cookie.duration_seconds
           Value: '30'
-
-  
-  
-  
 
 ##################------------------DATABASE-----------------------------###############################
   
@@ -1112,11 +1108,17 @@ Resources:
         - !Ref DataSubnet3
 
 
-
-
-
-########################################################################################################
+#######################---------------OutPuts--------###############################################
 Outputs:
+
+  URL:
+    Description: The URL of the website
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - PublicApplicationLoadBalancer
+          - DNSName
   VpcId:
     Value: !Ref MyVPC
 
