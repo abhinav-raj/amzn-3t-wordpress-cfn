@@ -16,11 +16,11 @@
   #EXTRACREDIT
   # !Done: DevOps Pipeline, 
   #  Done: ElastiCache
-
+  #  Done: EFS
+  # Done: 2. Encrypt data at rest and in transit
 
   #ToDo
-  #  !Done: EFS
-  # !Done: 2. Encrypt data at rest and in transit
+ 
   # !Done: DevOps Pipeline, 
 
 
@@ -807,11 +807,7 @@ Resources:
           yum update -y
           yum install -y httpd
           yum install php-mysql -y
-          usermod -a -G apache ec2-user
-          chown -R ec2-user:apache /var/www
-          chmod 2775 /var/www
-          find /var/www -type d -exec chmod 2775 {} \;
-          find /var/www -type f -exec chmod 0664 {} \;
+
           amazon-linux-extras install epel -y
           yum install stress -y
           
@@ -821,19 +817,125 @@ Resources:
           cd /var/www/html
           yum install wget -y
           amazon-linux-extras install -y php7.2
+          yum install telnet -y
           
+          curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
+          chmod +x ./awslogs-agent-setup.py
+          yum install -y awslogs
+          service awslogs start
+          systemctl start awslogsd
+          systemctl enable awslogsd.service
+          telnet ${ElastiCacheCluster.ConfigurationEndpoint.Address} 11211
+
+          usermod -a -G apache ec2-user
+          chown -R ec2-user:apache /var/www
+          chgrp -R apache /var/www
+          chmod 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+          sudo chown -R apache:apache /var/www/html
+          
+
           curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
           chmod +x wp-cli.phar
           mv wp-cli.phar /usr/local/bin/wp
-          chown -R www-data:www-data /var/www/html/
+          
           chmod -R g+w /var/www/html
-          wp core download
+          chmod -R 755 wp-content
+          chown -R apache:apache wp-content
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
+          cp -r wordpress/* /var/www/html/
+          
           wp core install --url=${PublicApplicationLoadBalancer.DNSName} --admin_user=supervisor --admin_password=strongpassword --admin_email=info@example.com
-          wp config create --dbname=${DatabaseName} --dbuser=${DatabaseMasterUsername} --dbpass=${DatabaseMasterPassword}
+          wp config create --dbname=wordpress --dbuser=wordpress --dbpass=wordpress
 
           systemctl start httpd
           systemctl enable httpd
-          
+
+          cat << 'EOF' > /var/www/html/wp-config.php
+          <?php
+          /**
+            * The base configuration for WordPress
+            *
+            * The wp-config.php creation script uses this file during the
+            * installation. You don't have to use the web site, you can
+            * copy this file to "wp-config.php" and fill in the values.
+            *
+            * This file contains the following configurations:
+            *
+            * * MySQL settings
+            * * Secret keys
+            * * Database table prefix
+            * * ABSPATH
+            *
+            * @link https://wordpress.org/support/article/editing-wp-config-php/
+            *
+            * @package WordPress
+            */
+
+            // ** MySQL settings - You can get this info from your web host ** //
+            /** The name of the database for WordPress */
+              
+              define( 'DB_NAME', '${DatabaseName}' );
+            /** MySQL database username */
+              define( 'DB_USER', '${DatabaseMasterUsername}' );
+            /** MySQL database password */
+              define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
+            /** MySQL hostname */
+              define( 'DB_HOST', '${RDSCluster.Endpoint.Address}' );
+            /** Database Charset to use in creating database tables. */
+              define( 'DB_CHARSET', 'utf8mb4' );
+            /** The Database Collate type. Don't change this if in doubt. */
+              define( 'DB_COLLATE', '' );
+            /**#@+
+              * Authentication Unique Keys and Salts.
+              *
+              * Change these to different unique phrases!
+              * You can generate these using the {@link https://api.wordpress.org/secret-key/1.1/salt/ WordPress.org secret-key service}
+              * You can change these at any point in time to invalidate all existing cookies. This will force all users to have to log in again.
+              *
+              * @since 2.6.0
+              */
+            define( 'AUTH_KEY',         'y6!CxRaZV+TFMr3O)^T a`h#w_z~BTHagddJ2QNqVI)<PQ#%?k1*O*/p76>&2VNz' );
+            define( 'SECURE_AUTH_KEY',  'Hhdc>3^U|%$H`KV1.K0L_/+%guY,}|9[y2B&Z21Pj6dn11XWc{n$;M1Omdh]/|jb' );
+            define( 'LOGGED_IN_KEY',    '-X~.ap8nJ6EZ:ZY,bH-u$,:VXYp{2AwBSkAIs*0s<Ii5::Vq?9(L$ga^T=i!0>6s' );
+            define( 'NONCE_KEY',        'cDR0zoYrH$O4vnU+C+CTw>3SSK<9,srvOEa=~_&]R/TkXaHC;2O6;!:K?1mS[!ix' );
+            define( 'AUTH_SALT',        'qAdAOyoj7__liYla6F+.YwntKojNhm]xt6@K22KuN>4{gTX:}l-lA6v4gUc+(s_h' );
+            define( 'SECURE_AUTH_SALT', 'q^6sVq-p&8Lu_YfPnP{ac5#*(?N*jxC<,;@aH}>!E:1q?o7 u8 oC]S/^6gC_+L<' );
+            define( 'LOGGED_IN_SALT',   '3V (2HpFP(+8xng>@@|^.f+,Dvs{6)ugiV7bk1[,X&$Wx.y1D8L!9xC=^;MS&[hr' );
+            define( 'NONCE_SALT',       ')==*:UPNl:rJ6Nnb*.A4N>*.KaI)[>)k+H|6kXqys#H`x);_SKtDp6:rV{n)|_{,' );
+
+            /**#@-*/
+            /**
+              * WordPress Database Table prefix.
+              *
+              * You can have multiple installations in one database if you give each
+              * a unique prefix. Only numbers, letters, and underscores please!
+              */
+            $table_prefix = 'wp_';
+
+            /**
+              * For developers: WordPress debugging mode.
+              *
+              * Change this to true to enable the display of notices during development.
+              * It is strongly recommended that plugin and theme developers use WP_DEBUG
+              * in their development environments.
+              *
+              * For information on other constants that can be used for debugging,
+              * visit the documentation.
+              *
+              * @link https://wordpress.org/support/article/debugging-in-wordpress/
+              */
+            define( 'WP_DEBUG', false );
+            define('FS_METHOD','direct');
+            /* That's all, stop editing! Happy publishing. */
+            /** Absolute path to the WordPress directory. */
+            if ( ! defined( 'ABSPATH' ) ) {
+              define( 'ABSPATH', __DIR__ . '/' );
+            }
+            /** Sets up WordPress vars and included files. */
+            require_once ABSPATH . 'wp-settings.php'; 
           
            
             
@@ -1143,8 +1245,11 @@ Outputs:
   DBEndPoint:
     Value: !GetAtt RDSCluster.Endpoint.Address
 
+  ElastiCacheEP:
+    Value: !Ref ElastiCacheCluster
 
-  
+
+
 
 
 
