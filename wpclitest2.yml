@@ -726,6 +726,7 @@ Resources:
       AutoScalingGroupName: 
         Ref: "WebServerGroup"
       MaxSize: 10
+      DesiredCapacity: 3
       MinSize: 3
       Recurrence: "0 7 * * *"
   OffHourSchedule: 
@@ -735,7 +736,9 @@ Resources:
         Ref: "WebServerGroup"
       MaxSize: 2
       MinSize: 1
+      DesiredCapacity: 1
       Recurrence: "0 19 * * *"
+     
 
   #Scaling based on CPU
   WebServerScaleUpPolicy:
@@ -825,9 +828,9 @@ Resources:
           chown -R www-data:www-data /var/www/html/
           chmod -R g+w /var/www/html
           wp core download
-          wp config create --dbname=${DatabaseName} --dbuser=${DatabaseMasterUsername} --dbpass=${DatabaseMasterPassword}
           wp core install --url=${PublicApplicationLoadBalancer.DNSName} --admin_user=supervisor --admin_password=strongpassword --admin_email=info@example.com
-          
+          wp config create --dbname=${DatabaseName} --dbuser=${DatabaseMasterUsername} --dbpass=${DatabaseMasterPassword}
+
           systemctl start httpd
           systemctl enable httpd
           
