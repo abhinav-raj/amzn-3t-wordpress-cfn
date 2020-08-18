@@ -755,13 +755,13 @@ Resources:
   CPUAlarmHigh:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-up if CPU > 80% for 10 minutes
+      AlarmDescription: Scale-up if CPU > 50% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 90
+      Threshold: 50
       AlarmActions:
         - !Ref WebServerScaleUpPolicy
       Dimensions:
@@ -771,13 +771,13 @@ Resources:
   CPUAlarmLow:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-down if CPU < 50% for 10 minutes
+      AlarmDescription: Scale-down if CPU < 20% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 70
+      Threshold: 20
       AlarmActions:
         - !Ref WebServerScaleDownPolicy
       Dimensions:
@@ -807,23 +807,28 @@ Resources:
           chmod 2775 /var/www
           find /var/www -type d -exec chmod 2775 {} \;
           find /var/www -type f -exec chmod 0664 {} \;
+          amazon-linux-extras install epel -y
+          yum install stress -y
+          
           yum install amazon-efs-utils -y
           cd /var/www
           sudo mount -t efs -o tls ${EFSFileSystem}:/ /var/www/html
-          
-          amazon-linux-extras install -y php7.2
           cd /var/www/html
           yum install wget -y
-          wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          tar -xzf wordpress-5.4.1.tar.gz
+          amazon-linux-extras install -y php7.2
+          wget https://wordpress.org/wordpress-5.5.tar.gz
+          tar -xzf wordpress-5.5.tar.gz
           cp -r wordpress/* /var/www/html/
           rm -rf wordpress
-          rm -rf wordpress-5.4.1.tar.gz
+          rm -rf wordpress-5.5.tar.gz
           chmod -R 755 wp-content
           chown -R apache:apache wp-content
           systemctl start httpd
           systemctl enable httpd
-          
+          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          mv wp-cli.phar /usr/local/bin/wp
+
           
           cat << 'EOF' > /var/www/html/wp-config.php
           <?php
@@ -859,6 +864,7 @@ Resources:
               define( 'DB_CHARSET', 'utf8mb4' );
             /** The Database Collate type. Don't change this if in doubt. */
               define( 'DB_COLLATE', '' );
+              define('FS_METHOD', 'direct');
             /**#@+
               * Authentication Unique Keys and Salts.
               *
