@@ -615,16 +615,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           SourceSecurityGroupId:  !Ref PublicAlbSecurityGroup
-          # SourceSecurityGroupId: !Select 
-          #   - 0
-          #   - !GetAtt 
-          #     - PublicApplicationLoadBalancer
-          #     - SecurityGroups
-          #CidrIp: 0.0.0.0/0
-        # - IpProtocol: tcp     #Enable HTTPs access via port 443'
-          #   FromPort: 443
-          #   ToPort: 443
-          #   SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
         - IpProtocol: tcp     #SSH
           FromPort: 22
           ToPort: 22
@@ -660,8 +650,8 @@ Resources:
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 2049
-          ToPort: 2049
-          CidrIp: 0.0.0.0/0
+          ToPort: 2049  
+          SourceSecurityGroupId: !Ref WebSecurityGroup
 #-------------instances created from here ------------------------------    
   #EC2 bastian 
   BastianInstance:
@@ -701,6 +691,7 @@ Resources:
         - !Ref WebSubnet1
         - !Ref WebSubnet2
         - !Ref WebSubnet3
+      DesiredCapacity: '3'
       LaunchConfigurationName: !Ref LaunchConfig
       MinSize: '1'
       MaxSize: '10'
@@ -709,7 +700,6 @@ Resources:
           # Metrics:                                              #If dont specify, all metrics are enabled
           #   - "GroupPendingInstances"
           #   - "GroupTerminatingInstances"
-      DesiredCapacity: '3'
       NotificationConfigurations:
         - TopicARN: !Ref NotificationTopic
           NotificationTypes:
@@ -736,6 +726,7 @@ Resources:
       AutoScalingGroupName: 
         Ref: "WebServerGroup"
       MaxSize: 10
+      DesiredCapacity: 3
       MinSize: 3
       Recurrence: "0 7 * * *"
   OffHourSchedule: 
@@ -745,33 +736,37 @@ Resources:
         Ref: "WebServerGroup"
       MaxSize: 2
       MinSize: 1
+      DesiredCapacity: 1
       Recurrence: "0 19 * * *"
+     
 
   #Scaling based on CPU
   WebServerScaleUpPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
-      AdjustmentType: ChangeInCapacity
+      AdjustmentType: PercentChangeInCapacity
       AutoScalingGroupName: !Ref WebServerGroup
+      PolicyType: SimpleScaling
       Cooldown: '60'
       ScalingAdjustment: 1
   WebServerScaleDownPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
-      AdjustmentType: ChangeInCapacity
+      AdjustmentType: PercentChangeInCapacity
       AutoScalingGroupName: !Ref WebServerGroup
+      PolicyType: SimpleScaling
       Cooldown: '60'
       ScalingAdjustment: -1
   CPUAlarmHigh:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-up if CPU > 80% for 10 minutes
+      AlarmDescription: Scale-up if CPU > 50% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 90
+      Threshold: 50
       AlarmActions:
         - !Ref WebServerScaleUpPolicy
       Dimensions:
@@ -781,13 +776,13 @@ Resources:
   CPUAlarmLow:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-down if CPU < 50% for 10 minutes
+      AlarmDescription: Scale-down if CPU < 20% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 70
+      Threshold: 20
       AlarmActions:
         - !Ref WebServerScaleDownPolicy
       Dimensions:
@@ -798,94 +793,6 @@ Resources:
 
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'      
-    Metadata:
-      AWS::CloudFormation::Init:
-        configSets:
-          MountConfig:
-          - setup
-          - mount
-        setup:
-          packages:
-            yum:
-              nfs-utils: []
-          files:
-            "/home/ec2-user/post_nfsstat":
-              content: !Sub |
-                #!/bin/bash
-
-                INPUT="$(cat)"
-                CW_JSON_OPEN='{ "Namespace": "EFS", "MetricData": [ '
-                CW_JSON_CLOSE=' ] }'
-                CW_JSON_METRIC=''
-                METRIC_COUNTER=0
-
-                for COL in 1 2 3 4 5 6; do
-
-                 COUNTER=0
-                 METRIC_FIELD=$COL
-                 DATA_FIELD=$(($COL+($COL-1)))
-
-                 while read line; do
-                   if [[ COUNTER -gt 0 ]]; then
-
-                     LINE=`echo $line | tr -s ' ' `
-                     AWS_COMMAND="aws cloudwatch put-metric-data --region ${AWS::Region}"
-                     MOD=$(( $COUNTER % 2))
-
-                     if [ $MOD -eq 1 ]; then
-                       METRIC_NAME=`echo $LINE | cut -d ' ' -f $METRIC_FIELD`
-                     else
-                       METRIC_VALUE=`echo $LINE | cut -d ' ' -f $DATA_FIELD`
-                     fi
-
-                     if [[ -n "$METRIC_NAME" && -n "$METRIC_VALUE" ]]; then
-                       INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                       CW_JSON_METRIC="$CW_JSON_METRIC { \"MetricName\": \"$METRIC_NAME\", \"Dimensions\": [{\"Name\": \"InstanceId\", \"Value\": \"$INSTANCE_ID\"} ], \"Value\": $METRIC_VALUE },"
-                       unset METRIC_NAME
-                       unset METRIC_VALUE
-
-                       METRIC_COUNTER=$((METRIC_COUNTER+1))
-                       if [ $METRIC_COUNTER -eq 20 ]; then
-                         # 20 is max metric collection size, so we have to submit here
-                         aws cloudwatch put-metric-data --region ${AWS::Region} --cli-input-json "`echo $CW_JSON_OPEN ${!CW_JSON_METRIC%?} $CW_JSON_CLOSE`"
-
-                         # reset
-                         METRIC_COUNTER=0
-                         CW_JSON_METRIC=''
-                       fi
-                     fi
-
-
-
-                     COUNTER=$((COUNTER+1))
-                   fi
-
-                   if [[ "$line" == "Client nfs v4:" ]]; then
-                     # the next line is the good stuff
-                     COUNTER=$((COUNTER+1))
-                   fi
-                 done <<< "$INPUT"
-                done
-
-                # submit whatever is left
-                aws cloudwatch put-metric-data --region ${AWS::Region} --cli-input-json "`echo $CW_JSON_OPEN ${!CW_JSON_METRIC%?} $CW_JSON_CLOSE`"
-              mode: '000755'
-              owner: ec2-user
-              group: ec2-user
-            "/home/ec2-user/crontab":
-              content: "* * * * * /usr/sbin/nfsstat | /home/ec2-user/post_nfsstat\n"
-              owner: ec2-user
-              group: ec2-user
-          commands:
-            01_createdir:
-              command: !Sub "mkdir myEFSvolume"
-        mount:
-          commands:
-            01_mount:
-              command: !Sub >
-                mount -t nfs4 -o nfsvers=4.1 ${FileSystem}.efs.${AWS::Region}.amazonaws.com:/ /myEFSvolume
-            02_permissions:
-              command: !Sub "chown ec2-user:ec2-user /myEFSvolume"
     Properties:
       #IamInstanceProfile: !Ref WebServerInstanceProfile
       ImageId: !Ref AmiID
@@ -896,35 +803,47 @@ Resources:
         - !Ref WebSecurityGroup
       UserData:
         Fn::Base64: !Sub  |
-          #!/bin/bash -xe
+          #!/bin/bash
           yum update -y
           yum install -y httpd
           yum install php-mysql -y
-          yum install -y aws-cfn-bootstrap
+
+          amazon-linux-extras install epel -y
+          yum install stress -y
+          
+          yum install amazon-efs-utils -y
+          cd /var/www
+          sudo mount -t efs -o tls ${EFSFileSystem}:/ /var/www/html
+          cd /var/www/html
+          yum install wget -y
+          amazon-linux-extras install -y php7.2
+          yum install telnet -y
+          
+
           usermod -a -G apache ec2-user
           chown -R ec2-user:apache /var/www
+          chgrp -R apache /var/www
           chmod 2775 /var/www
           find /var/www -type d -exec chmod 2775 {} \;
           find /var/www -type f -exec chmod 0664 {} \;
+          sudo chown -R apache:apache /var/www/html
 
-          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfig --configsets MountConfig --region ${AWS::Region}
-          crontab /home/ec2-user/crontab
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource WebServerGroup --region ${AWS::Region}
+          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          mv wp-cli.phar /usr/local/bin/wp
           
-          amazon-linux-extras install -y php7.2
-          cd /var/www/html
-          yum install wget -y
-          wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          tar -xzf wordpress-5.4.1.tar.gz
-          cp -r wordpress/* /var/www/html/
-          rm -rf wordpress
-          rm -rf wordpress-5.4.1.tar.gz
+          chmod -R g+w /var/www/html
           chmod -R 755 wp-content
           chown -R apache:apache wp-content
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
+
+          wp core install --url=${PublicApplicationLoadBalancer.DNSName} --admin_user=supervisor --admin_password=strongpassword --admin_email=info@example.com
+          wp config create --dbname=${DatabaseName} --dbuser=${DatabaseMasterUsername} --dbpass=${DatabaseMasterPassword}
+
           systemctl start httpd
           systemctl enable httpd
-          
-          
+
           cat << 'EOF' > /var/www/html/wp-config.php
           <?php
           /**
@@ -948,6 +867,7 @@ Resources:
 
             // ** MySQL settings - You can get this info from your web host ** //
             /** The name of the database for WordPress */
+              
               define( 'DB_NAME', '${DatabaseName}' );
             /** MySQL database username */
               define( 'DB_USER', '${DatabaseMasterUsername}' );
@@ -999,14 +919,17 @@ Resources:
               * @link https://wordpress.org/support/article/debugging-in-wordpress/
               */
             define( 'WP_DEBUG', false );
-
+            define('FS_METHOD','direct');
             /* That's all, stop editing! Happy publishing. */
             /** Absolute path to the WordPress directory. */
             if ( ! defined( 'ABSPATH' ) ) {
               define( 'ABSPATH', __DIR__ . '/' );
             }
             /** Sets up WordPress vars and included files. */
-            require_once ABSPATH . 'wp-settings.php';    
+            require_once ABSPATH . 'wp-settings.php'; 
+          
+           
+            
     DependsOn: RDSCluster
    
 #-------------------IAM---------------------------------------
@@ -1251,9 +1174,11 @@ Resources:
         - !Ref DataSubnet3
 
 ##############------------------EFS-----------------------#############
-  FileSystem:
+  EFSFileSystem:
     Type: AWS::EFS::FileSystem
     Properties:
+      BackupPolicy:
+        Status: ENABLED
       Encrypted: true                       #!Ref EncrpytedBoolean
       PerformanceMode: generalPurpose
       LifecyclePolicies:
@@ -1261,12 +1186,15 @@ Resources:
       FileSystemTags:
         - Key: Name
           Value:  myEFSvolume
+      
   
+
+
   ElasticFileSystemMountTarget0:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId:
-        Ref: FileSystem
+        Ref: EFSFileSystem
       SubnetId:
         Ref: WebSubnet1
       SecurityGroups:
@@ -1275,7 +1203,7 @@ Resources:
   ElasticFileSystemMountTarget1:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystem
+      FileSystemId: !Ref EFSFileSystem
       SecurityGroups:
         - !Ref MountTargetSecurityGroup
       SubnetId: !Ref WebSubnet2
@@ -1283,7 +1211,7 @@ Resources:
   ElasticFileSystemMountTarget2:
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref FileSystem
+      FileSystemId: !Ref EFSFileSystem
       SecurityGroups:
         - !Ref MountTargetSecurityGroup
       SubnetId: !Ref WebSubnet3
@@ -1299,64 +1227,16 @@ Outputs:
         - !GetAtt 
           - PublicApplicationLoadBalancer
           - DNSName
-  VpcId:
-    Value: !Ref MyVPC
-
-  PublicSubnet1:
-    Value: !Ref PublicSubnet1
-
-  PublicSubnet2:
-    Value: !Ref PublicSubnet2
   
-  PublicIP:
-    Description: EC2 public IP
-    Value: !GetAtt BastianInstance.PublicIp
-  PublicDNS:
-    Description: 'Public DNS of EC2 instance'
-    Value: !GetAtt BastianInstance.PublicDnsName
-  
-  # WebServerElasticIP:
-  #   Description: 'Elastic IP assigned to bastian instance'
-  #   Value: !Ref BastianEIP
-  
-  WebSubnet1:
-    Value: !Ref WebSubnet1
-  WebSubnet2:
-    Value: !Ref WebSubnet2
-  BastionSecurityGroup:
-    Value: !Ref BastionSecurityGroup
-  PublicAlbSecurityGroup:
-    Value: !Ref PublicAlbSecurityGroup
-  WebSecurityGroup:
-    Value: !Ref WebSecurityGroup
-  
-  # WebServerPublicDNS:
-  #   Description: 'Public DNS of EC2 instance'
-  #   Value: !GetAtt WebServerInstance.PublicDnsName
 
-  # WebServerElasticIP:
-  #   Description: 'Elastic IP assigned to EC2'
-  #   Value: !Ref WebServerEIP
-
-  # WebsiteURL:
-  #   Value: !Sub http://${WebServerEIP}
-  #   Description: Application URL
-
+  FileSystem:
+    Value: !Ref EFSFileSystem
+  FileSystemId:
+    Value: !GetAtt EFSFileSystem.FileSystemId
   DBEndPoint:
     Value: !GetAtt RDSCluster.Endpoint.Address
 
-
-  
-
-
-
-
-
-
-
-
-
-
-
+  ElastiCacheEP:
+    Value: !Ref ElastiCacheCluster
 
 

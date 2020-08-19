@@ -1,3 +1,4 @@
+#VersionSnapshot22working, snapshot23 for EFS mount to support ALB ref and stored data
 #Problem and ProjectTracking
   #The agency has decided to move forward with partnering with AWS. The first project is to migrate the National Park Weather Service from on-prem to AWS. The Weather Service is a wordpress site running on a Linux os. The weather service will be used mostly by east coast National Park visitors. The service must be highly available and able to respond to usage peaks and slowdowns. The administrators need a secure way to access the servers without exposing ssh to the world. The administrators are also looking to reduce their administrative overhead in regard to their database. They would like to limit or reduce the need to patch database servers. The administrators also need to be notified of any server failures.
   # Done: 1. OS baseline image running Amazon Linux 2
@@ -888,7 +889,7 @@ Resources:
               * @link https://wordpress.org/support/article/debugging-in-wordpress/
               */
             define( 'WP_DEBUG', false );
-            
+            define('FS_METHOD','direct');
 
             /* That's all, stop editing! Happy publishing. */
             /** Absolute path to the WordPress directory. */

@@ -16,11 +16,11 @@
   #EXTRACREDIT
   # !Done: DevOps Pipeline, 
   #  Done: ElastiCache
-
+  #  Done: EFS
+  # Done: 2. Encrypt data at rest and in transit
 
   #ToDo
-  #  !Done: EFS
-  # !Done: 2. Encrypt data at rest and in transit
+ 
   # !Done: DevOps Pipeline, 
 
 
@@ -529,6 +529,11 @@ Resources:
       Tags:
         - Key: Name
           Value: VPCIGW
+        - Key: Application
+          Value:
+            Ref: AWS::StackName
+        - Key: Network
+          Value: Public
 
   #VPCGatewayAttachment binds VPC and IgW
   VPCGW:
@@ -610,16 +615,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           SourceSecurityGroupId:  !Ref PublicAlbSecurityGroup
-          # SourceSecurityGroupId: !Select 
-          #   - 0
-          #   - !GetAtt 
-          #     - PublicApplicationLoadBalancer
-          #     - SecurityGroups
-          #CidrIp: 0.0.0.0/0
-        # - IpProtocol: tcp     #Enable HTTPs access via port 443'
-          #   FromPort: 443
-          #   ToPort: 443
-          #   SourceSecurityGroupId: !Ref PublicAlbSecurityGroup
         - IpProtocol: tcp     #SSH
           FromPort: 22
           ToPort: 22
@@ -646,7 +641,17 @@ Resources:
           SourceSecurityGroupId: !Ref WebSecurityGroup
       VpcId:
         !Ref MyVPC
-
+  MountTargetSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: MyVPC
+      GroupDescription: Security group for mount target
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049  
+          SourceSecurityGroupId: !Ref WebSecurityGroup
 #-------------instances created from here ------------------------------    
   #EC2 bastian 
   BastianInstance:
@@ -676,12 +681,17 @@ Resources:
 
   WebServerGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn:
+      - ElasticFileSystemMountTarget0
+      - ElasticFileSystemMountTarget1 
+      - ElasticFileSystemMountTarget2
     Properties:
       AutoScalingGroupName: Mb3ASG
       VPCZoneIdentifier: 
         - !Ref WebSubnet1
         - !Ref WebSubnet2
         - !Ref WebSubnet3
+      DesiredCapacity: '3'
       LaunchConfigurationName: !Ref LaunchConfig
       MinSize: '1'
       MaxSize: '10'
@@ -690,7 +700,6 @@ Resources:
           # Metrics:                                              #If dont specify, all metrics are enabled
           #   - "GroupPendingInstances"
           #   - "GroupTerminatingInstances"
-      DesiredCapacity: '3'
       NotificationConfigurations:
         - TopicARN: !Ref NotificationTopic
           NotificationTypes:
@@ -709,50 +718,34 @@ Resources:
   #     Cooldown: '60'
   #     PolicyType: SimpleScaling
   #     ScalingAdjustment: 1
-  
-  #Scaling based on time
-  BusinessHourSchedule: 
-    Type: AWS::AutoScaling::ScheduledAction
-    Properties:
-      AutoScalingGroupName: 
-        Ref: "WebServerGroup"
-      MaxSize: 10
-      MinSize: 3
-      Recurrence: "0 7 * * *"
-  OffHourSchedule: 
-    Type: AWS::AutoScaling::ScheduledAction
-    Properties:
-      AutoScalingGroupName: 
-        Ref: "WebServerGroup"
-      MaxSize: 2
-      MinSize: 1
-      Recurrence: "0 19 * * *"
 
   #Scaling based on CPU
   WebServerScaleUpPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
-      AdjustmentType: ChangeInCapacity
+      AdjustmentType: PercentChangeInCapacity
       AutoScalingGroupName: !Ref WebServerGroup
+      PolicyType: SimpleScaling
       Cooldown: '60'
       ScalingAdjustment: 1
   WebServerScaleDownPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
-      AdjustmentType: ChangeInCapacity
+      AdjustmentType: PercentChangeInCapacity
       AutoScalingGroupName: !Ref WebServerGroup
+      PolicyType: SimpleScaling
       Cooldown: '60'
       ScalingAdjustment: -1
   CPUAlarmHigh:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-up if CPU > 80% for 10 minutes
+      AlarmDescription: Scale-up if CPU > 50% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 90
+      Threshold: 50
       AlarmActions:
         - !Ref WebServerScaleUpPolicy
       Dimensions:
@@ -762,13 +755,13 @@ Resources:
   CPUAlarmLow:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: Scale-down if CPU < 50% for 10 minutes
+      AlarmDescription: Scale-down if CPU < 20% for 10 minutes
       MetricName: CPUUtilization
       Namespace: AWS/EC2
       Statistic: Average
       Period: 300
       EvaluationPeriods: 2
-      Threshold: 70
+      Threshold: 20
       AlarmActions:
         - !Ref WebServerScaleDownPolicy
       Dimensions:
@@ -776,7 +769,25 @@ Resources:
           Value: !Ref WebServerGroup
       ComparisonOperator: LessThanThreshold
 
-
+  #Scaling based on time
+  BusinessHourSchedule: 
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName: 
+        Ref: "WebServerGroup"
+      MaxSize: 10
+      DesiredCapacity: 3
+      MinSize: 3
+      Recurrence: "0 7 * * *"
+  OffHourSchedule: 
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName: 
+        Ref: "WebServerGroup"
+      MaxSize: 2
+      MinSize: 1
+      DesiredCapacity: 1
+      Recurrence: "0 19 * * *"
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'      
     Properties:
@@ -795,25 +806,49 @@ Resources:
           yum install php-mysql -y
           usermod -a -G apache ec2-user
           chown -R ec2-user:apache /var/www
+          chgrp -R apache /var/www
           chmod 2775 /var/www
-          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type d -exec chmod -R 2775 {} \;
           find /var/www -type f -exec chmod 0664 {} \;
-
-          
+          chown -R apache:apache /var/www/html
+            
           amazon-linux-extras install -y php7.2
-          cd /var/www/html
+          yum install gcc-c++ -y
+          
           yum install wget -y
-          wget https://wordpress.org/wordpress-5.4.1.tar.gz
-          tar -xzf wordpress-5.4.1.tar.gz
+          wget https://elasticache-downloads.s3.amazonaws.com/ClusterClient/PHP-7.0/latest-64bit
+          tar -zxvf latest-64bit
+          mv artifact/amazon-elasticache-cluster-client.so /usr/lib64/php/modules/
+          echo "extension=amazon-elasticache-cluster-client.so" | sudo tee --append /etc/php.d/50-memcached.ini
+
+          yum install amazon-efs-utils -y
+          cd /var/www
+          mount -t efs -o tls ${EFSFileSystem}:/ /var/www/html/
+          
+          curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
+          chmod +x ./awslogs-agent-setup.py
+          yum install -y awslogs
+          service awslogs start
+          systemctl start awslogsd
+          systemctl enable awslogsd.service
+          
+          cd /var/www/html
+          chmod -R g+w /var/www/html
+          
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
           cp -r wordpress/* /var/www/html/
           rm -rf wordpress
-          rm -rf wordpress-5.4.1.tar.gz
+          rm -rf latest.tar.gz
           chmod -R 755 wp-content
           chown -R apache:apache wp-content
           systemctl start httpd
           systemctl enable httpd
-          
-          
+
+          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          mv wp-cli.phar /usr/local/bin/wp
+  
           cat << 'EOF' > /var/www/html/wp-config.php
           <?php
           /**
@@ -837,9 +872,10 @@ Resources:
 
             // ** MySQL settings - You can get this info from your web host ** //
             /** The name of the database for WordPress */
+              
               define( 'DB_NAME', '${DatabaseName}' );
             /** MySQL database username */
-              define( 'DB_USER', '${DatabaseMasterUsername}' );
+              define( 'DB_USER', '${DatabaseMasterUsername}' );s
             /** MySQL database password */
               define( 'DB_PASSWORD', '${DatabaseMasterPassword}' );
             /** MySQL hostname */
@@ -888,15 +924,15 @@ Resources:
               * @link https://wordpress.org/support/article/debugging-in-wordpress/
               */
             define( 'WP_DEBUG', false );
-            
-
+            define('FS_METHOD','direct');
             /* That's all, stop editing! Happy publishing. */
             /** Absolute path to the WordPress directory. */
             if ( ! defined( 'ABSPATH' ) ) {
               define( 'ABSPATH', __DIR__ . '/' );
             }
             /** Sets up WordPress vars and included files. */
-            require_once ABSPATH . 'wp-settings.php';    
+            require_once ABSPATH . 'wp-settings.php'; 
+                 
     DependsOn: RDSCluster
    
 #-------------------IAM---------------------------------------
@@ -913,7 +949,39 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
+  CloudWatchPutMetricsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+  CloudWatchPutMetricsRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CloudWatch_PutMetricData
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: CloudWatchPutMetricData
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource:
+          - "*"
+      Roles:
+      - Ref: CloudWatchPutMetricsRole
+  CloudWatchPutMetricsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: CloudWatchPutMetricsRole
   # WebServerInstanceProfile:
   #   Type: AWS::IAM::InstanceProfile
   #   Properties:
@@ -1097,7 +1165,7 @@ Resources:
         - Key: Name
           Value: GovRDSElastiCacheCluster
       VpcSecurityGroupIds:
-      - !Ref ElastiCacheSecurityGroup  
+        - !Ref ElastiCacheSecurityGroup  
 
   ElastiCacheSubnetGroup: 
     Type: AWS::ElastiCache::SubnetGroup
@@ -1108,6 +1176,48 @@ Resources:
         - !Ref DataSubnet2
         - !Ref DataSubnet3
 
+##############------------------EFS-----------------------#############
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      Encrypted: true                       #!Ref EncrpytedBoolean
+      PerformanceMode: generalPurpose
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value:  myEFSvolume
+      
+  
+
+
+  ElasticFileSystemMountTarget0:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId:
+        Ref: WebSubnet1
+      SecurityGroups:
+        - Ref: MountTargetSecurityGroup
+  
+  ElasticFileSystemMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !Ref MountTargetSecurityGroup
+      SubnetId: !Ref WebSubnet2
+  
+  ElasticFileSystemMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !Ref MountTargetSecurityGroup
+      SubnetId: !Ref WebSubnet3
 
 #######################---------------OutPuts--------###############################################
 Outputs:
@@ -1120,56 +1230,17 @@ Outputs:
         - !GetAtt 
           - PublicApplicationLoadBalancer
           - DNSName
-  VpcId:
-    Value: !Ref MyVPC
-
-  PublicSubnet1:
-    Value: !Ref PublicSubnet1
-
-  PublicSubnet2:
-    Value: !Ref PublicSubnet2
   
-  PublicIP:
-    Description: EC2 public IP
-    Value: !GetAtt BastianInstance.PublicIp
-  PublicDNS:
-    Description: 'Public DNS of EC2 instance'
-    Value: !GetAtt BastianInstance.PublicDnsName
-  
-  # WebServerElasticIP:
-  #   Description: 'Elastic IP assigned to bastian instance'
-  #   Value: !Ref BastianEIP
-  
-  WebSubnet1:
-    Value: !Ref WebSubnet1
-  WebSubnet2:
-    Value: !Ref WebSubnet2
-  BastionSecurityGroup:
-    Value: !Ref BastionSecurityGroup
-  PublicAlbSecurityGroup:
-    Value: !Ref PublicAlbSecurityGroup
-  WebSecurityGroup:
-    Value: !Ref WebSecurityGroup
-  
-  # WebServerPublicDNS:
-  #   Description: 'Public DNS of EC2 instance'
-  #   Value: !GetAtt WebServerInstance.PublicDnsName
 
-  # WebServerElasticIP:
-  #   Description: 'Elastic IP assigned to EC2'
-  #   Value: !Ref WebServerEIP
-
-  # WebsiteURL:
-  #   Value: !Sub http://${WebServerEIP}
-  #   Description: Application URL
-
+  FileSystem:
+    Value: !Ref EFSFileSystem
+  FileSystemId:
+    Value: !GetAtt EFSFileSystem.FileSystemId
   DBEndPoint:
     Value: !GetAtt RDSCluster.Endpoint.Address
 
-
-  
-
-
+  ElastiCacheEP:
+    Value: !Ref ElastiCacheCluster
 
 
 
@@ -1181,3 +1252,10 @@ Outputs:
 
 
 
+
+
+
+
+
+          # service awslogs start    
+          # systemctl enable awslogsd.service

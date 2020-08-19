@@ -813,43 +813,43 @@ Resources:
           
           yum install amazon-efs-utils -y
           cd /var/www
-          sudo mount -t efs -o tls ${EFSFileSystem}:/ /var/www/html
-          cd /var/www/html
+          sudo mount -t efs -o tls ${EFSFileSystem}:/ /var/www/html/
+          
           yum install wget -y
           amazon-linux-extras install -y php7.2
-          yum install telnet -y
           
+          yum install telnet -y
+          telnet ${ElastiCacheCluster.ConfigurationEndpoint.Address} 11211
+
           curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
           chmod +x ./awslogs-agent-setup.py
           yum install -y awslogs
           service awslogs start
           systemctl start awslogsd
           systemctl enable awslogsd.service
-          telnet ${ElastiCacheCluster.ConfigurationEndpoint.Address} 11211
 
           usermod -a -G apache ec2-user
           chown -R ec2-user:apache /var/www
           chgrp -R apache /var/www
           chmod 2775 /var/www
-          find /var/www -type d -exec chmod 2775 {} \;
-          find /var/www -type f -exec chmod 0664 {} \;
-          sudo chown -R apache:apache /var/www/html
           
-
-          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-          chmod +x wp-cli.phar
-          mv wp-cli.phar /usr/local/bin/wp
-          
+          cd /var/www/html
           chmod -R g+w /var/www/html
-          chmod -R 755 wp-content
           chown -R apache:apache wp-content
           wget https://wordpress.org/latest.tar.gz
           tar -xzf latest.tar.gz
           cp -r wordpress/* /var/www/html/
-          
-          wp core install --url=${PublicApplicationLoadBalancer.DNSName} --admin_user=supervisor --admin_password=strongpassword --admin_email=info@example.com
-          wp config create --dbname=wordpress --dbuser=wordpress --dbpass=wordpress
+          rm -rf wordpress
+          rm -rf latest.tar.gz
 
+          find /var/www -type d -exec chmod -R 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+          chown -R apache:apache /var/www/html
+          
+          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          mv wp-cli.phar /usr/local/bin/wp
+          
           systemctl start httpd
           systemctl enable httpd
 
@@ -936,6 +936,8 @@ Resources:
             }
             /** Sets up WordPress vars and included files. */
             require_once ABSPATH . 'wp-settings.php'; 
+            
+            EOF
           
            
             
@@ -1171,7 +1173,7 @@ Resources:
         - Key: Name
           Value: GovRDSElastiCacheCluster
       VpcSecurityGroupIds:
-      - !Ref ElastiCacheSecurityGroup  
+        - !Ref ElastiCacheSecurityGroup  
 
   ElastiCacheSubnetGroup: 
     Type: AWS::ElastiCache::SubnetGroup
